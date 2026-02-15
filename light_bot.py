@@ -6,7 +6,7 @@ import threading
 import os
 import sys
 
-# --- [ ПУНКТ 2: РОБОТА З КОНФІГ-ФАЙЛОМ ] ---
+# --- [ РОБОТА З КОНФІГ-ФАЙЛОМ ] ---
 try:
     # Імпортуємо налаштування з локального файлу, створеного Menu.sh
     from config import BOT_TOKEN, ADMIN_IDS, CHAT_ID
@@ -16,8 +16,8 @@ except ImportError:
 
 bot = telebot.TeleBot(BOT_TOKEN)
 last_power_state = None
-# Посилання на репозиторій для меню допомоги
 REPO_URL = "https://github.com/Bombin1/PowerBot.git" 
+MONO_URL = "https://send.monobank.ua/jar/8WFAPWLdPu"
 
 # --- [ ДОПОМІЖНІ ФУНКЦІЇ ] ---
 
@@ -35,7 +35,7 @@ def get_battery_info():
         result = subprocess.check_output(["termux-battery-status"], text=True)
         data = json.loads(result)
         
-        # Отримуємо температуру та віднімаємо 5 градусів для реалістичності
+        # Корекція температури (-5 градусів)
         raw_temp = data.get("temperature", 0)
         corrected_temp = round(raw_temp - 5, 1) if isinstance(raw_temp, (int, float)) else "?"
         
@@ -72,7 +72,6 @@ def monitoring_loop():
 @bot.message_handler(commands=['update'])
 def update_bot(message):
     """Оновлення з GitHub із автоматичним бекапом"""
-    # Перевірка, чи є ID користувача у списку адміністраторів
     if message.from_user.id not in ADMIN_IDS:
         bot.reply_to(message, "⛔ У вас немає прав.")
         return
@@ -106,22 +105,46 @@ def rollback_bot(message):
     else:
         bot.reply_to(message, "❌ Файл бекапу не знайдено.")
 
-# --- [ ОБРОБКА КОМАНД ] ---
+# --- [ ОБРОБКА КОМАНД ТА ПРИВІТАННЯ ] ---
+
+def get_help_text(user_id):
+    """Генерує текст допомоги з логічним розділенням блоків"""
+    # 1. Основні команди для всіх
+    help_text = (
+        "📜 **Команди:**\n"
+        "• 💡 або 🛎️ — Статус світла та батареї.\n"
+        "• ❓ `/help` — Допомога."
+    )
+    
+    # 2. Адмін-панель (якщо користувач адмін)
+    if user_id in ADMIN_IDS or user_id == 0: # 0 використовується для системного привітання
+        help_text += "\n\n🛠️ **Адмін-панель:**\n🔄 `/update` | 🔙 `/rollback`"
+    
+    # 3. Посилання внизу (Markdown формат)
+    help_text += (
+        "\n\n"
+        f"🔗 [GitHub проєкту]({REPO_URL})\n"
+        f"☕ [На каву автору]({MONO_URL})"
+    )
+    return help_text
 
 @bot.message_handler(commands=['help'])
 def help_command(message):
-    """Меню допомоги з посиланням на репозиторій"""
-    help_text = (
-        "📜 **Команди:**\n"
-        "💡, 🛎️ — Статус світла та батареї.\n"
-        "❓ `/help` — Допомога.\n\n"
-        f"🔗 **Репозиторій проєкту:**\n{REPO_URL}\n\n"
-        "☕ **На каву автору:**\n"
-        "https://send.monobank.ua/jar/8WFAPWLdPu"
-    )
-    if message.from_user.id in ADMIN_IDS:
-        help_text += "\n\n🛠️ **Адмін-панель:**\n🔄 `/update` | 🔙 `/rollback`"
-    bot.reply_to(message, help_text, parse_mode="Markdown", disable_web_page_preview=True)
+    """Меню допомоги за запитом"""
+    text = get_help_text(message.from_user.id)
+    bot.reply_to(message, text, parse_mode="Markdown", disable_web_page_preview=True)
+
+def send_welcome_message():
+    """Надсилає привітання в групу лише при першому запуску"""
+    first_run_file = ".first_run_completed"
+    if not os.path.exists(first_run_file):
+        try:
+            welcome_text = "🚀 **Бот успішно налаштований та запущений!**\n\n" + get_help_text(0)
+            bot.send_message(CHAT_ID, welcome_text, parse_mode="Markdown", disable_web_page_preview=True)
+            with open(first_run_file, "w") as f:
+                f.write("done")
+        except Exception as e:
+            print(f"Помилка привітання: {e}")
 
 @bot.message_handler(func=lambda message: True)    
 def handle_message(message):
@@ -132,7 +155,6 @@ def handle_message(message):
         if info:
             status = "Є" if info["plugged"] else "НЕМАЄ"
             icon = "💡" if info["plugged"] else "🕯️"
-            # Адаптивна іконка заряду
             try:
                 percent = int(info['percent'])
                 batt_icon = "🪫" if percent <= 50 else "🔋"
@@ -146,6 +168,9 @@ def handle_message(message):
 if __name__ == "__main__":
     subprocess.run(["termux-wake-lock"])
     threading.Thread(target=monitoring_loop, daemon=True).start()
+    
+    # Перевірка на перший запуск
+    send_welcome_message()
     
     while True:
         try:
