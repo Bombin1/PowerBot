@@ -1,0 +1,155 @@
+import telebot
+import subprocess
+import json
+import time
+import threading
+import os
+import sys
+
+# --- [ ПУНКТ 2: РОБОТА З КОНФІГ-ФАЙЛОМ ] ---
+try:
+    # Імпортуємо налаштування з локального файлу, створеного Menu.sh
+    from config import BOT_TOKEN, ADMIN_IDS, CHAT_ID
+except ImportError:
+    print("❌ Помилка: Файл config.py не знайдено! Запустіть Menu.sh для налаштування.")
+    sys.exit(1)
+
+bot = telebot.TeleBot(BOT_TOKEN)
+last_power_state = None
+# Посилання на репозиторій для меню допомоги
+REPO_URL = "https://github.com/Bombin1/PowerBot.git" 
+
+# --- [ ДОПОМІЖНІ ФУНКЦІЇ ] ---
+
+def send_error_to_admin(error_text):
+    """Надсилає повідомлення про помилку першому адміну в списку"""
+    try:
+        if ADMIN_IDS:
+            bot.send_message(ADMIN_IDS[0], f"⚠️ **Критична помилка:**\n`{error_text}`", parse_mode="Markdown")
+    except Exception:
+        pass
+
+def get_battery_info():
+    """Отримує дані батареї через Termux з корекцією температури"""
+    try:
+        result = subprocess.check_output(["termux-battery-status"], text=True)
+        data = json.loads(result)
+        
+        # Отримуємо температуру та віднімаємо 5 градусів для реалістичності
+        raw_temp = data.get("temperature", 0)
+        corrected_temp = round(raw_temp - 5, 1) if isinstance(raw_temp, (int, float)) else "?"
+        
+        return {
+            "plugged": data.get("plugged", "UNPLUGGED") != "UNPLUGGED",
+            "percent": data.get("percentage", "?"),
+            "temp": corrected_temp
+        }
+    except Exception as e:
+        print(f"Помилка батареї: {e}")
+        return None
+
+def monitoring_loop():
+    """Фоновий процес моніторингу світла"""
+    global last_power_state
+    info = get_battery_info()
+    if info:
+        last_power_state = info["plugged"]
+    
+    while True:
+        try:
+            info = get_battery_info()
+            if info and last_power_state is not None and info["plugged"] != last_power_state:
+                text = "💡 **Світло з'явилось!**" if info["plugged"] else "🕯️ **Світло зникло!**"
+                bot.send_message(CHAT_ID, text, parse_mode="Markdown")
+                last_power_state = info["plugged"]
+            time.sleep(30)
+        except Exception as e:
+            send_error_to_admin(f"Помилка моніторингу: {e}")
+            time.sleep(10)
+
+# --- [ СИСТЕМА ОНОВЛЕННЯ ТА ВІДКАТУ ] ---
+
+@bot.message_handler(commands=['update'])
+def update_bot(message):
+    """Оновлення з GitHub із автоматичним бекапом"""
+    # Перевірка, чи є ID користувача у списку адміністраторів
+    if message.from_user.id not in ADMIN_IDS:
+        bot.reply_to(message, "⛔ У вас немає прав.")
+        return
+
+    bot.reply_to(message, "📦 Створюю локальний бекап та завантажую оновлення...")
+    try:
+        subprocess.run(["cp", sys.argv[0], "light_bot_backup.py"])
+        subprocess.check_output(["git", "pull"], text=True)
+        check_code = subprocess.run([sys.executable, "-m", "py_compile", sys.argv[0]])
+        
+        if check_code.returncode == 0:
+            bot.reply_to(message, "✅ Оновлено! Перезавантаження...")
+            os.execv(sys.executable, ['python'] + sys.argv)
+        else:
+            subprocess.run(["cp", "light_bot_backup.py", sys.argv[0]])
+            bot.reply_to(message, "❌ Помилка в коді! Повернено бекап.")
+    except Exception as e:
+        bot.reply_to(message, f"❌ Помилка: {e}")
+        send_error_to_admin(f"Помилка оновлення: {e}")
+
+@bot.message_handler(commands=['rollback'])
+def rollback_bot(message):
+    """Ручний відкат до попередньої версії"""
+    if message.from_user.id not in ADMIN_IDS:
+        return
+
+    if os.path.exists("light_bot_backup.py"):
+        bot.reply_to(message, "🔙 Повертаю попередню версію з бекапу...")
+        subprocess.run(["cp", "light_bot_backup.py", sys.argv[0]])
+        os.execv(sys.executable, ['python'] + sys.argv)
+    else:
+        bot.reply_to(message, "❌ Файл бекапу не знайдено.")
+
+# --- [ ОБРОБКА КОМАНД ] ---
+
+@bot.message_handler(commands=['help'])
+def help_command(message):
+    """Меню допомоги з посиланням на репозиторій"""
+    help_text = (
+        "📜 **Команди:**\n"
+        "💡, 🛎️ — Статус світла та батареї.\n"
+        "❓ `/help` — Допомога.\n\n"
+        f"🔗 **Репозиторій проєкту:**\n{REPO_URL}\n\n"
+        "☕ **На каву автору:**\n"
+        "https://send.monobank.ua/jar/8WFAPWLdPu"
+    )
+    if message.from_user.id in ADMIN_IDS:
+        help_text += "\n\n🛠️ **Адмін-панель:**\n🔄 `/update` | 🔙 `/rollback`"
+    bot.reply_to(message, help_text, parse_mode="Markdown", disable_web_page_preview=True)
+
+@bot.message_handler(func=lambda message: True)    
+def handle_message(message):
+    """Обробка тригерів статусу"""
+    text = message.text.lower().strip()
+    if any(x in text for x in ["💡", "🛎️"]) or text == "/status":
+        info = get_battery_info()
+        if info:
+            status = "Є" if info["plugged"] else "НЕМАЄ"
+            icon = "💡" if info["plugged"] else "🕯️"
+            # Адаптивна іконка заряду
+            try:
+                percent = int(info['percent'])
+                batt_icon = "🪫" if percent <= 50 else "🔋"
+            except:
+                batt_icon = "🔋"
+                
+            reply = (f"{icon} **Світло {status}**\n"
+                     f"{batt_icon}: {info['percent']}% | 🌡️: ~{info['temp']}°C")
+            bot.reply_to(message, reply, parse_mode="Markdown")
+
+if __name__ == "__main__":
+    subprocess.run(["termux-wake-lock"])
+    threading.Thread(target=monitoring_loop, daemon=True).start()
+    
+    while True:
+        try:
+            bot.infinity_polling()
+        except Exception as e:
+            send_error_to_admin(f"Polling error: {e}")
+            time.sleep(5)
