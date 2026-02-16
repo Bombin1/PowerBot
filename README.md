@@ -4,7 +4,7 @@
 Бот працює в середовищі Termux, аналізує статус батареї та миттєво повідомляє про зміни в Telegram.
 
 <p align="center">
-  <img src="assets/PowerBot.png" width="1000" alt="Меню бота">
+  <img src="PowerBot.png" width="1000" alt="Меню бота">
 </p>
 
 ## ✨ Основні можливості
