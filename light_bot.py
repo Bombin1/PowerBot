@@ -37,7 +37,7 @@ def get_battery_info():
         
         # Корекція температури (-5 градусів)
         raw_temp = data.get("temperature", 0)
-        corrected_temp = round(raw_temp - 5, 1) if isinstance(raw_temp, (int, float)) else "?"
+        corrected_temp = round(raw_temp - 2, 1) if isinstance(raw_temp, (int, float)) else "?"
         
         return {
             "plugged": data.get("plugged", "UNPLUGGED") != "UNPLUGGED",
