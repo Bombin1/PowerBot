@@ -274,18 +274,24 @@ def handle_message(message):
 def update_bot(message):
     if message.from_user.id not in ADMIN_IDS: return
     try:
-        bot.reply_to(message, "⚙️ Спроба примусового оновлення...")
-        # 1. Скидаємо всі локальні зміни, які заважають Git
+        bot.reply_to(message, "⚙️ Виконую примусове оновлення та очистку конфліктів...")
+        
+        # 1. Скидаємо всі локальні зміни, які заважають (те, що ми шукаємо)
+        subprocess.run(["git", "fetch", "--all"])
         subprocess.run(["git", "reset", "--hard", "origin/main"])
-        # 2. Встановлюємо бібліотеку (на випадок якщо її нема)
+        
+        # 2. Встановлюємо бібліотеку (якщо її ще немає)
         subprocess.run([sys.executable, "-m", "pip", "install", "requests"])
-        # 3. Підтягуємо код
+        
+        # 3. Робимо фінальний pull на всякий випадок
         subprocess.run(["git", "pull", "origin", "main"])
         
-        bot.reply_to(message, "✅ Оновлено. Перезапуск...")
+        bot.reply_to(message, "✅ Код синхронізовано з GitHub. Перезапуск...")
+        
+        # Перезавантажуємо бота
         os.execv(sys.executable, ['python'] + sys.argv)
     except Exception as e:
-        bot.reply_to(message, f"❌ Помилка: {e}")
+        bot.reply_to(message, f"❌ Помилка при оновленні: {e}")
 
 def rollback_bot(message):
     if os.path.exists("light_bot_backup.py"):
