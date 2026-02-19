@@ -190,74 +190,76 @@ def callback_handler(call):
         else:
             bot.edit_message_text("🔕 Сповіщення вимкнено.", call.message.chat.id, call.message.message_id)
 
+    # 1. ОБРОБКА ВИБОРУ МІСТА
     elif call.data.startswith("city_"):
         city = call.data.split("_")[1]
-        settings = load_settings() # Завантажуємо актуальні налаштування
+        settings = load_settings()
         settings['city'] = city
         save_settings(settings)
         
-        # Відправляємо сигнал, що бот думає
         bot.answer_callback_query(call.id, f"Завантажую черги для м. {city}...")
         
         try:
-            # Отримуємо JSON файл з даними
             r = requests.get(CITY_SOURCES[city], timeout=10)
-            r.raise_for_status() # Перевіряємо, чи посилання доступне
+            r.raise_for_status()
             data = r.json()
             
-            # --- ЛОГІКА ФІЛЬТРАЦІЇ ---
-            # Залишаємо тільки ключі, що починаються на 'GPV' (напр. GPV4.1)
-            # Це прибере regionId, lastUpdated, fact, preset, time_zone
-            queues = [k for k in data.keys() if k.startswith('GPV')]
+            # Зберігаємо завантажений графік локально, щоб /status міг його прочитати
+            with open(LOCAL_SCHEDULE_FILE, 'w') as f:
+                json.dump(data, f)
             
-            if not queues:
-                bot.edit_message_text(
-                    "❌ У файлі не знайдено активних черг (GPV).",
-                    call.message.chat.id,
-                    call.message.message_id
-                )
-                return
-
-            # Сортуємо список (1.1, 1.2, 2.1 і т.д.)
+            # Фільтруємо: тільки ключі GPV
+            queues = [k for k in data.keys() if k.startswith('GPV')]
             queues.sort()
             
+            if not queues:
+                bot.edit_message_text("❌ Активних черг GPV не знайдено.", call.message.chat.id, call.message.message_id)
+                return
+
             markup = types.InlineKeyboardMarkup(row_width=3)
             btns = []
             for q in queues:
-                # На кнопці показуємо чистий номер (напр. "4.1")
-                # А в callback_data передаємо ПОВНИЙ ключ "GPV4.1"
-                display_name = q.replace('GPV', '')
+                # ВАЖЛИВО: текст "4.1", а callback_data "queue_GPV4.1"
                 btns.append(types.InlineKeyboardButton(
-                    text=display_name, 
+                    text=q.replace('GPV', ''), 
                     callback_data=f"queue_{q}"
                 ))
             
             markup.add(*btns)
-            
-            # Додаємо кнопку "Назад", якщо треба
-            markup.add(types.InlineKeyboardButton(text="⬅️ Назад до вибору області", callback_data="set_location"))
+            markup.add(types.InlineKeyboardButton(text="⬅️ Назад", callback_data="set_location"))
 
             bot.edit_message_text(
-                f"🔢 Оберіть вашу чергу для м. {city}:", 
+                f"🔢 Оберіть чергу для м. {city}:", 
                 call.message.chat.id, 
                 call.message.message_id, 
                 reply_markup=markup
             )
-            
         except Exception as e:
-            print(f"Помилка завантаження черг: {e}")
-            bot.send_message(call.message.chat.id, f"❌ Не вдалося отримати дані з сервера. Спробуйте пізніше.")
+            bot.send_message(call.message.chat.id, f"❌ Помилка завантаження: {e}")
 
+    # 2. ОБРОБКА ВИБОРУ ЧЕРГИ (ЗБЕРЕЖЕННЯ)
     elif call.data.startswith("queue_"):
-        # Отримуємо повний ключ (напр. GPV4.1)
-        queue_key = call.data.split("_")[1]
-        settings['queue'] = queue_key
+        queue_key = call.data.split("_")[1]  # Отримуємо ПОВНИЙ ключ (напр. GPV4.1)
+        settings = load_settings()
+        settings['queue'] = queue_key        # Зберігаємо саме повний ключ
         save_settings(settings)
         
-        bot.answer_callback_query(call.id, f"✅ Чергу {queue_key.replace('GPV', '')} обрано!")
-        # Виводимо підтвердження з чистим номером
-        bot.edit_message_text(f"✅ Налаштування завершено!\nМісто: {settings['city']}\nЧерга: {queue_key.replace('GPV', '')}", 
-                              call.message.chat.id, call.message.message_id)
+        bot.answer_callback_query(call.id, "✅ Налаштування збережено!")
+        
+        # Гарний фінальний текст
+        res_text = (
+            "✅ **Налаштування завершено!**\n\n"
+            f"📍 Місто: {settings.get('city')}\n"
+            f"🔢 Черга: {queue_key.replace('GPV', '')}\n\n"
+            "Тепер ви можете перевірити статус командою /status"
+        )
+        
+        bot.edit_message_text(
+            res_text, 
+            call.message.chat.id, 
+            call.message.message_id, 
+            parse_mode="Markdown"
+        )
 
     elif call.data == "exec_update":
         if call.from_user.id in ADMIN_IDS:
