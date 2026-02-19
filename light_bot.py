@@ -195,23 +195,42 @@ def callback_handler(call):
         settings['city'] = city
         save_settings(settings)
         
-        # Завантажуємо черги з файлу
         try:
             r = requests.get(CITY_SOURCES[city])
             data = r.json()
-            queues = [k for k in data.keys() if k not in ["time_zone", "time_type", "regionAffiliation"]]
             
-            markup = types.InlineKeyboardMarkup(row_width=2)
-            btns = [types.InlineKeyboardButton(q, callback_data=f"queue_{q}") for q in queues]
+            # ВИПРАВЛЕННЯ: Шукаємо тільки ключі, що починаються на GPV
+            # Це відсіє regionId, fact, preset та інше сміття
+            queues = [k for k in data.keys() if k.startswith("GPV")]
+            
+            # Сортуємо, щоб черги йшли по порядку: 1, 2, 3...
+            queues.sort()
+            
+            markup = types.InlineKeyboardMarkup(row_width=3)
+            # На кнопці показуємо назву без "GPV", але в callback передаємо повний ключ
+            btns = [types.InlineKeyboardButton(q.replace("GPV", ""), callback_data=f"queue_{q}") for q in queues]
             markup.add(*btns)
             bot.edit_message_text(f"🔢 Оберіть чергу для м. {city}:", call.message.chat.id, call.message.message_id, reply_markup=markup)
-        except:
+        except Exception as e:
+            print(f"Error: {e}") # Для відладки в консолі Termux
             bot.send_message(call.message.chat.id, "❌ Помилка завантаження черг.")
 
     elif call.data.startswith("queue_"):
-        settings['queue'] = call.data.split("_")[1]
+        # Витягуємо назву черги. split("_", 1)[1] гарантує, що ми візьмемо 
+        # все, що йде після першого підкреслення (наприклад, "GPV4.1")
+        queue_id = call.data.split("_", 1)[1]
+        
+        settings['queue'] = queue_id
         save_settings(settings)
-        bot.edit_message_text(f"✅ Налаштовано! Місто: {settings['city']}, Черга: {settings['queue']}", call.message.chat.id, call.message.message_id)
+        
+        # Для відображення прибираємо GPV, щоб було "Черга: 4.1"
+        display_name = queue_id.replace("GPV", "")
+        
+        bot.edit_message_text(
+            f"✅ Налаштовано!\n🏙️ Місто: {settings['city']}\n🔢 Черга: {display_name}", 
+            call.message.chat.id, 
+            call.message.message_id
+        )
 
     elif call.data == "exec_update":
         update_bot(call.message)
