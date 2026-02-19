@@ -12,7 +12,7 @@ install_logic() {
         echo "🆕 Перший запуск. Налаштування системи..."
         pkg update && pkg upgrade -y
         pkg install python git termux-api -y
-        pip install pyTelegramBotAPI
+        pip install pyTelegramBotAPI requests
         termux-wake-lock
         
         # Завантажуємо бота, якщо його нема
