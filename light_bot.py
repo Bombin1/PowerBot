@@ -197,16 +197,37 @@ def callback_handler(call):
         
         # Завантажуємо черги з файлу
         try:
-            r = requests.get(CITY_SOURCES[city])
+            r = requests.get(CITY_SOURCES[city], timeout=10)
             data = r.json()
-            queues = [k for k in data.keys() if k not in ["time_zone", "time_type", "regionAffiliation"]]
             
-            markup = types.InlineKeyboardMarkup(row_width=2)
-            btns = [types.InlineKeyboardButton(q, callback_data=f"queue_{q}") for q in queues]
+            # --- ВИПРАВЛЕНА ЛОГІКА ФІЛЬТРАЦІЇ ---
+            # Залишаємо тільки ті ключі, що починаються на 'GPV' (напр. GPV4.1, GPV4)
+            # Це автоматично прибере технічні поля: regionId, lastUpdated, fact, preset
+            queues = [k for k in data.keys() if k.startswith('GPV')]
+            
+            if not queues:
+                bot.send_message(call.message.chat.id, "❌ У файлі не знайдено активних черг (GPV).")
+                return
+
+            # Сортуємо для зручності відображення
+            queues.sort()
+            
+            markup = types.InlineKeyboardMarkup(row_width=3)
+            btns = []
+            for q in queues:
+                # На кнопці показуємо чистий номер (напр. "4.1"), але передаємо повний ключ "GPV4.1"
+                display_name = q.replace('GPV', '')
+                btns.append(types.InlineKeyboardButton(text=display_name, callback_data=f"queue_{q}"))
+            
             markup.add(*btns)
-            bot.edit_message_text(f"🔢 Оберіть чергу для м. {city}:", call.message.chat.id, call.message.message_id, reply_markup=markup)
-        except:
-            bot.send_message(call.message.chat.id, "❌ Помилка завантаження черг.")
+            bot.edit_message_text(
+                f"🔢 Оберіть чергу для м. {city}:", 
+                call.message.chat.id, 
+                call.message.message_id, 
+                reply_markup=markup
+            )
+        except Exception as e:
+            bot.send_message(call.message.chat.id, f"❌ Помилка завантаження черг: {e}")
 
     elif call.data.startswith("queue_"):
         settings['queue'] = call.data.split("_")[1]
