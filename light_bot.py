@@ -59,24 +59,33 @@ def save_settings(settings):
 # --- [ ПАРСИНГ ГРАФІКА ] ---
 
 def format_schedule(data, queue_name):
-    """Об'єднує години в блоки та формує текст розкладу (виправлено для Хмельницького)"""
+    """Об'єднує години в блоки, використовуючи ключ 'today' для точності"""
     
-    # 1. ШУКАЄМО ДАНІ ЧЕРГИ
-    queue_data = data.get(queue_name)
+    queue_data = None
     
-    # Якщо в корені немає, шукаємо в структурі Хмельницького (fact -> data -> timestamp)
-    if not queue_data and 'fact' in data and 'data' in data['fact']:
+    # 1. ШУКАЕМО ДАНІ
+    # Перевіряємо структуру Хмельницького (fact -> data)
+    if 'fact' in data and 'data' in data['fact']:
         fact_data = data['fact']['data']
-        if fact_data:
+        # Отримуємо ID сьогоднішнього дня з ключа "today"
+        today_id = str(data['fact'].get('today', ''))
+        
+        if today_id in fact_data:
+            queue_data = fact_data[today_id].get(queue_name)
+        else:
+            # Якщо "today" не знайдено, беремо перший доступний як запасний
             first_ts = list(fact_data.keys())[0]
             queue_data = fact_data[first_ts].get(queue_name)
+            
+    # Якщо структура звичайна (Київ і т.д.)
+    if not queue_data:
+        queue_data = data.get(queue_name)
 
     if not queue_data:
-        return f"❌ Дані для черги {queue_name} не знайдені."
+        return f"❌ Дані для черги {queue_name.replace('GPV', '')} не знайдені."
 
-    # 2. ОТРИМУЄМО НАЗВИ ТА ЧАСОВІ ПОЯСИ
+    # 2. ОТРИМУЄМО ТИПИ ЧАСУ ТА ПОЯСИ
     time_zones = data.get("time_zone", {})
-    # Для Хмельницького типи часто в data['preset']['time_type']
     time_types = data.get("time_type", {})
     if not time_types and 'preset' in data:
         time_types = data['preset'].get('time_type', {})
@@ -85,12 +94,11 @@ def format_schedule(data, queue_name):
     current_status = None
     start_time = None
     
-    # 3. ЛОГІКА ГРУПУВАННЯ В БЛОКИ
+    # 3. ГРУПУВАННЯ ГОДИН
     for i in range(1, 25):
         key = str(i)
         status = queue_data.get(key)
         
-        # Визначаємо час (з файлу або за замовчуванням)
         if time_zones and key in time_zones:
             t_start = time_zones[key][1]
             t_end = time_zones[key][2]
@@ -107,12 +115,11 @@ def format_schedule(data, queue_name):
         if i == 24:
             schedule_blocks.append((current_status, start_time, t_end))
 
-    # 4. ФОРМУЄМО ТЕКСТ З ІКОНКАМИ
+    # 4. ФОРМУВАННЯ ТЕКСТУ
     text = f"📅 **Графік на сьогодні ({queue_name.replace('GPV', '')}):**\n\n"
     
     for status, s, e in schedule_blocks:
-        # Логіка іконок: 
-        # У Хмельницькому "no" - світло є (зелений), "yes" - обмеження (червоний)
+        # У Хмельницькому: "no" - світло є (🟢), "yes" - обмеження (🔴)
         if status == "no":
             icon = "🟢"
             desc = "Світло є"
