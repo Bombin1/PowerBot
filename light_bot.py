@@ -235,9 +235,21 @@ def callback_handler(call):
         bot.edit_message_text(f"✅ Налаштовано! Місто: {settings['city']}, Черга: {settings['queue']}", call.message.chat.id, call.message.message_id)
 
     elif call.data == "exec_update":
-        update_bot(call.message)
+        if call.from_user.id in ADMIN_IDS:
+            bot.answer_callback_query(call.id, "🚀 Запуск оновлення...")
+            bot.edit_message_text("📥 Виконую `git reset --hard` через Menu.sh... Бот перезапуститься за 5-10 сек.", call.message.chat.id, call.message.message_id)
+            # Вихід з процесу. Menu.sh побачить це і запустить цикл оновлення
+            os._exit(0) 
+
     elif call.data == "exec_rollback":
-        rollback_bot(call.message)
+        if call.from_user.id in ADMIN_IDS:
+            if os.path.exists("light_bot_backup.py"):
+                bot.answer_callback_query(call.id, "⏪ Відкат до бекапу...")
+                subprocess.run(["cp", "light_bot_backup.py", "light_bot.py"])
+                bot.edit_message_text("✅ Бекап відновлено! Перезапуск...", call.message.chat.id, call.message.message_id)
+                os._exit(0)
+            else:
+                bot.answer_callback_query(call.id, "❌ Бекап не знайдено", show_alert=True)
 
 # --- [ ІСНУЮЧІ ФУНКЦІЇ БАТАРЕЇ ТА ДОПОМОГИ ] ---
 
