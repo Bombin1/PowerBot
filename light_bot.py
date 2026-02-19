@@ -96,7 +96,6 @@ def format_schedule(data, queue_name):
         if i == 24:
             schedule_blocks.append((current_status, start_time, t_end))
 
-    # ПОВЕРТАЄМО ТІЛЬКИ ТІЛО (без заголовка)
     text = ""
     for status, s, e in schedule_blocks:
         if status == "no":
