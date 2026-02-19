@@ -269,24 +269,16 @@ def handle_message(message):
 def update_bot(message):
     if message.from_user.id not in ADMIN_IDS: return
     try:
-        bot.reply_to(message, "⚙️ Виконую примусове оновлення та очистку конфліктів...")
-        
-        # 1. Скидаємо всі локальні зміни, які заважають (те, що ми шукаємо)
-        subprocess.run(["git", "fetch", "--all"])
-        subprocess.run(["git", "reset", "--hard", "origin/main"])
-        
-        # 2. Встановлюємо бібліотеку (якщо її ще немає)
-        subprocess.run([sys.executable, "-m", "pip", "install", "requests"])
-        
-        # 3. Робимо фінальний pull на всякий випадок
-        subprocess.run(["git", "pull", "origin", "main"])
-        
-        bot.reply_to(message, "✅ Код синхронізовано з GitHub. Перезапуск...")
-        
-        # Перезавантажуємо бота
+        bot.reply_to(message, "🧨 Спроба силового скидання Гіта...")
+        import subprocess
+        # Оце головна команда, яка врятує нас від помилки "exit status 1"
+        subprocess.run(["git", "reset", "--hard", "origin/main"], check=True)
+        bot.reply_to(message, "✅ Гіт очищено. Спробую затягнути код...")
+        subprocess.run(["git", "pull", "origin", "main"], check=True)
+        bot.reply_to(message, "🚀 Код оновлено! Перезапуск...")
         os.execv(sys.executable, ['python'] + sys.argv)
     except Exception as e:
-        bot.reply_to(message, f"❌ Помилка при оновленні: {e}")
+        bot.reply_to(message, f"❌ Навіть так не вийшло: {e}")
 
 def rollback_bot(message):
     if os.path.exists("light_bot_backup.py"):
