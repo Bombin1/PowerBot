@@ -8,7 +8,6 @@ import os
 import sys
 import requests
 from datetime import datetime
-exit()
 
 # --- [ РОБОТА З КОНФІГ-ФАЙЛОМ ] ---
 try:
