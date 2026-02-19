@@ -59,13 +59,12 @@ def save_settings(settings):
 # --- [ ПАРСИНГ ГРАФІКА ] ---
 
 def format_schedule(data, queue_name):
-    """Об'єднує години в блоки (без заголовка)"""
+    """Зчитує дані ТІЛЬКИ для поточного дня через ключ today"""
     queue_data = None
     
-    # 1. ШУКАЄМО ДАНІ
     if 'fact' in data and 'data' in data['fact']:
-        fact_data = data['fact']['data']
         today_id = str(data['fact'].get('today', ''))
+        fact_data = data['fact']['data']
         if today_id in fact_data:
             queue_data = fact_data[today_id].get(queue_name)
     
@@ -73,13 +72,10 @@ def format_schedule(data, queue_name):
         queue_data = data.get(queue_name)
 
     if not queue_data:
-        return f"❌ Дані для черги {queue_name.replace('GPV', '')} не знайдені."
+        return None
 
-    # 2. ОТРИМУЄМО ТИПИ ЧАСУ ТА ПОЯСИ
-    time_zones = data.get("time_zone", {})
-    time_types = data.get("time_type", {})
-    if not time_types and 'preset' in data:
-        time_types = data['preset'].get('time_type', {})
+    time_zones = data.get("time_zone") or (data.get("preset") or {}).get("time_zone", {})
+    time_types = data.get("time_type") or (data.get("preset") or {}).get("time_type", {})
 
     schedule_blocks = []
     current_status = None
@@ -88,36 +84,28 @@ def format_schedule(data, queue_name):
     for i in range(1, 25):
         key = str(i)
         status = queue_data.get(key)
-        
         if time_zones and key in time_zones:
-            t_start = time_zones[key][1]
-            t_end = time_zones[key][2]
+            t_start, t_end = time_zones[key][1], time_zones[key][2]
         else:
-            t_start = f"{i-1:02d}:00"
-            t_end = f"{i:02d}:00"
+            t_start, t_end = f"{i-1:02d}:00", f"{i:02d}:00"
 
         if status != current_status:
             if current_status is not None:
                 schedule_blocks.append((current_status, start_time, t_start))
-            current_status = status
-            start_time = t_start
-        
+            current_status, start_time = status, t_start
         if i == 24:
             schedule_blocks.append((current_status, start_time, t_end))
 
-    # 4. ФОРМУВАННЯ ТЕКСТУ (Тут тепер ТІЛЬКИ список годин)
-    text = "" 
+    # ПОВЕРТАЄМО ТІЛЬКИ ТІЛО (без заголовка)
+    text = ""
     for status, s, e in schedule_blocks:
         if status == "no":
-            icon = "🟢"
-            desc = "Світло є"
+            icon, desc = "🟢", "Світло є"
         elif status == "yes":
-            icon = "🔴"
-            desc = "Відключення"
+            icon, desc = "🔴", "Відключення"
         else:
             icon = "🟡"
             desc = time_types.get(status, "Можливе відключення")
-            
         text += f"{icon} **{s} - {e}** — {desc}\n"
     
     return text
@@ -127,21 +115,21 @@ def format_schedule(data, queue_name):
 def monitoring_loop():
     global last_power_state
     last_check_hour = -1
-    last_schedule_text = ""
+    last_schedule_text = "" 
     
     info = get_battery_info()
     if info: last_power_state = info["plugged"]
     
     while True:
         try:
-            # 1. МОНІТОРИНГ СВІТЛА
+            # 1. СВІТЛО (кожні 30 сек)
             info = get_battery_info()
             if info and last_power_state is not None and info["plugged"] != last_power_state:
                 text = "💡 **Світло з'явилось!**" if info["plugged"] else "🕯️ **Світло зникло!**"
                 bot.send_message(CHAT_ID, text, parse_mode="Markdown")
                 last_power_state = info["plugged"]
             
-            # 2. МОНІТОРИНГ ГРАФІКА
+            # 2. ГРАФІК (раз на годину)
             now = datetime.now()
             settings = load_settings()
             
@@ -153,16 +141,14 @@ def monitoring_loop():
                             data = r.json()
                             current_schedule = format_schedule(data, settings['queue'])
                             
-                            if current_schedule != last_schedule_text:
+                            # Публікуємо ТІЛЬКИ якщо текст змінився
+                            if current_schedule and current_schedule != last_schedule_text:
                                 q_num = settings['queue'].replace('GPV', '')
+                                # Якщо це перша запуск або зміна о 00:00 — заголовок "на сьогодні"
+                                # Якщо зміна вдень — заголовок "оновлено"
+                                header_type = "📅 **Графік на сьогодні**" if not last_schedule_text or now.hour == 0 else "⚠️ **Графік оновлено**"
+                                header = f"{header_type} ({q_num}):"
                                 
-                                # Твій формат заголовка
-                                if not last_schedule_text:
-                                    header = f"📅 **Графік на сьогодні ({q_num}):**"
-                                else:
-                                    header = f"⚠️ **Графік оновлено ({q_num}):**"
-                                
-                                # Відправка: Заголовок + 2 переноси рядка + Тіло графіка
                                 bot.send_message(CHAT_ID, f"{header}\n\n{current_schedule}", parse_mode="Markdown")
                                 
                                 last_schedule_text = current_schedule
@@ -171,7 +157,7 @@ def monitoring_loop():
                             
                             last_check_hour = now.hour
                     except Exception as sched_e:
-                        print(f"Помилка завантаження графіка: {sched_e}")
+                        print(f"Помилка графіка: {sched_e}")
 
             time.sleep(30)
         except Exception as e:
