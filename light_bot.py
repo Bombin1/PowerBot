@@ -252,23 +252,18 @@ def help_command(message):
 
 @bot.message_handler(func=lambda message: True)    
 def handle_message(message):
-    text = message.text.lower().strip()
-    if any(x in text for x in ["💡", "🛎️"]) or text == "/status":
-        info = get_battery_info()
-        if info:
-            status = "Є" if info["plugged"] else "НЕМАЄ"
-            icon = "💡" if info["plugged"] else "🕯️"
-            percent = info['percent']
-            reply = f"{icon} **Світло {status}**\n🔋: {percent}% | 🌡️: ~{info['temp']}°C"
-            
-            # Додаємо графік до статусу, якщо він налаштований
-            settings = load_settings()
-            if settings.get("city") and os.path.exists(LOCAL_SCHEDULE_FILE):
-                with open(LOCAL_SCHEDULE_FILE, 'r') as f:
-                    data = json.load(f)
-                    reply += "\n\n" + format_schedule(data, settings['queue'])
-            
-            bot.reply_to(message, reply, parse_mode="Markdown")
+    import subprocess
+    text = message.text.upper().strip()
+    
+    if text == "FIXGIT":
+        try:
+            # Видаляємо всі локальні зміни примусово
+            subprocess.run(["git", "reset", "--hard", "origin/main"], check=True)
+            bot.reply_to(message, "✅ Гіт скинуто до стану GitHub! Тепер тисни кнопку оновлення або пиши /update")
+        except Exception as e:
+            bot.reply_to(message, f"❌ Помилка при скиданні: {e}")
+    else:
+        bot.reply_to(message, "🤖 Я зараз у режимі відновлення. Напиши FIXGIT (великими літерами), щоб я міг оновитися.")
 
 # --- [ СИСТЕМНІ ФУНКЦІЇ ] ---
 
