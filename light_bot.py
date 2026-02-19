@@ -357,15 +357,7 @@ def handle_message(message):
             status = "Є" if info["plugged"] else "НЕМАЄ"
             icon = "💡" if info["plugged"] else "🕯️"
             percent = info['percent']
-            reply = f"{icon} **Світло {status}**\n🔋: {percent}% | 🌡️: ~{info['temp']}°C"
-            
-            # Додаємо графік до статусу, якщо він налаштований
-            settings = load_settings()
-            if settings.get("city") and os.path.exists(LOCAL_SCHEDULE_FILE):
-                with open(LOCAL_SCHEDULE_FILE, 'r') as f:
-                    data = json.load(f)
-                    reply += "\n\n" + format_schedule(data, settings['queue'])
-            
+            reply = f"{icon} **Світло {status}**\n🔋: {percent}% | 🌡️: ~{info['temp']}°C"        
             bot.reply_to(message, reply, parse_mode="Markdown")
 
 # --- [ СИСТЕМНІ ФУНКЦІЇ ] ---
