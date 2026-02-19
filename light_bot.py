@@ -290,29 +290,33 @@ def handle_message(message):
 
 # --- [ СИСТЕМНІ ФУНКЦІЇ ] ---
 
-def update_bot(message):
-    """Просто вимикає бота, а menu.sh підхопить і оновить код силоміць"""
-    if message.from_user.id not in ADMIN_IDS: return
+# Обробка кнопки Оновити
+@bot.callback_query_handler(func=lambda call: call.data == 'update')
+def update_callback(call):
     try:
-        bot.reply_to(message, "🚀 Виконую оновлення... Зачекайте 10-15 секунд.")
-        # Завершуємо процес. Bash-скрипт побачить це і зробить reset --hard
-        os._exit(0) 
+        bot.answer_callback_query(call.id, "⏳ Оновлення...")
+        # Виконуємо команду git pull для завантаження останніх змін з репозиторію
+        import subprocess
+        result = subprocess.run(['git', 'pull'], capture_output=True, text=True)
+        
+        if "Already up to date" in result.stdout:
+            bot.send_message(call.message.chat.id, "✅ У вас вже встановлена остання версія.")
+        else:
+            bot.send_message(call.message.chat.id, "🚀 Бот оновлений! Перезавантажте його через Menu.sh")
+            
     except Exception as e:
-        bot.reply_to(message, f"❌ Помилка: {e}")
+        bot.send_message(call.message.chat.id, f"❌ Помилка оновлення: {e}")
 
-def rollback_bot(message):
-    """Повертає бекап, якщо він є, і перезапускає бота"""
-    if message.from_user.id not in ADMIN_IDS: return
-    if os.path.exists("light_bot_backup.py"):
-        subprocess.run(["cp", "light_bot_backup.py", sys.argv[0]])
-        bot.reply_to(message, "🔙 Відкат виконано! Перезапуск...")
-        os._exit(0)
-    else:
-        bot.reply_to(message, "❌ Файл бекапу не знайдено.")
-
-if __name__ == "__main__":
-    subprocess.run(["termux-wake-lock"])
-    threading.Thread(target=monitoring_loop, daemon=True).start()
-    while True:
-        try: bot.infinity_polling()
-        except: time.sleep(5)
+# Обробка кнопки Відкотити (Rollback)
+@bot.callback_query_handler(func=lambda call: call.data == 'rollback')
+def rollback_callback(call):
+    try:
+        bot.answer_callback_query(call.id, "⏳ Повернення версії...")
+        import subprocess
+        # Відкочуємо зміни до попереднього комміту
+        subprocess.run(['git', 'reset', '--hard', 'HEAD^'], check=True)
+        
+        bot.send_message(call.message.chat.id, "⏪ Відкат виконано успішно! Перезавантажте бота.")
+        
+    except Exception as e:
+        bot.send_message(call.message.chat.id, f"❌ Помилка відкату: {e}")
