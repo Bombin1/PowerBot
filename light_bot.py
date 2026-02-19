@@ -308,15 +308,23 @@ def update_callback(call):
         bot.send_message(call.message.chat.id, f"❌ Помилка оновлення: {e}")
 
 # Обробка кнопки Відкотити (Rollback)
-@bot.callback_query_handler(func=lambda call: call.data == 'rollback')
-def rollback_callback(call):
-    try:
-        bot.answer_callback_query(call.id, "⏳ Повернення версії...")
-        import subprocess
-        # Відкочуємо зміни до попереднього комміту
-        subprocess.run(['git', 'reset', '--hard', 'HEAD^'], check=True)
-        
-        bot.send_message(call.message.chat.id, "⏪ Відкат виконано успішно! Перезавантажте бота.")
-        
-    except Exception as e:
-        bot.send_message(call.message.chat.id, f"❌ Помилка відкату: {e}")
+@bot.callback_query_handler(func=lambda call: call.data.startswith('region_'))
+def select_queue_callback(call):
+    region_id = call.data.split('_')[1]
+    url = REGIONS.get(region_id)
+    if url:
+        try:
+            data = requests.get(url).json()
+            # Фільтруємо: тільки ключі, що починаються на GPV
+            queues = [k for k in data.keys() if k.startswith('GPV')]
+            
+            markup = types.InlineKeyboardMarkup(row_width=2)
+            for q in queues:
+                # Відображаємо "4.1", але передаємо "GPV4.1"
+                markup.add(types.InlineKeyboardButton(
+                    text=q.replace('GPV', ''), 
+                    callback_data=f"queue_{region_id}_{q}"
+                ))
+            bot.edit_message_text("🔢 Оберіть чергу:", call.message.chat.id, call.message.message_id, reply_markup=markup)
+        except:
+            bot.answer_callback_query(call.id, "❌ Помилка завантаження JSON")
