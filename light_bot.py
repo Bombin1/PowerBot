@@ -192,47 +192,72 @@ def callback_handler(call):
 
     elif call.data.startswith("city_"):
         city = call.data.split("_")[1]
+        settings = load_settings() # Завантажуємо актуальні налаштування
         settings['city'] = city
         save_settings(settings)
         
-        # Завантажуємо черги з файлу
+        # Відправляємо сигнал, що бот думає
+        bot.answer_callback_query(call.id, f"Завантажую черги для м. {city}...")
+        
         try:
+            # Отримуємо JSON файл з даними
             r = requests.get(CITY_SOURCES[city], timeout=10)
+            r.raise_for_status() # Перевіряємо, чи посилання доступне
             data = r.json()
             
-            # --- ВИПРАВЛЕНА ЛОГІКА ФІЛЬТРАЦІЇ ---
-            # Залишаємо тільки ті ключі, що починаються на 'GPV' (напр. GPV4.1, GPV4)
-            # Це автоматично прибере технічні поля: regionId, lastUpdated, fact, preset
+            # --- ЛОГІКА ФІЛЬТРАЦІЇ ---
+            # Залишаємо тільки ключі, що починаються на 'GPV' (напр. GPV4.1)
+            # Це прибере regionId, lastUpdated, fact, preset, time_zone
             queues = [k for k in data.keys() if k.startswith('GPV')]
             
             if not queues:
-                bot.send_message(call.message.chat.id, "❌ У файлі не знайдено активних черг (GPV).")
+                bot.edit_message_text(
+                    "❌ У файлі не знайдено активних черг (GPV).",
+                    call.message.chat.id,
+                    call.message.message_id
+                )
                 return
 
-            # Сортуємо для зручності відображення
+            # Сортуємо список (1.1, 1.2, 2.1 і т.д.)
             queues.sort()
             
             markup = types.InlineKeyboardMarkup(row_width=3)
             btns = []
             for q in queues:
-                # На кнопці показуємо чистий номер (напр. "4.1"), але передаємо повний ключ "GPV4.1"
+                # На кнопці показуємо чистий номер (напр. "4.1")
+                # А в callback_data передаємо ПОВНИЙ ключ "GPV4.1"
                 display_name = q.replace('GPV', '')
-                btns.append(types.InlineKeyboardButton(text=display_name, callback_data=f"queue_{q}"))
+                btns.append(types.InlineKeyboardButton(
+                    text=display_name, 
+                    callback_data=f"queue_{q}"
+                ))
             
             markup.add(*btns)
+            
+            # Додаємо кнопку "Назад", якщо треба
+            markup.add(types.InlineKeyboardButton(text="⬅️ Назад до вибору області", callback_data="set_location"))
+
             bot.edit_message_text(
-                f"🔢 Оберіть чергу для м. {city}:", 
+                f"🔢 Оберіть вашу чергу для м. {city}:", 
                 call.message.chat.id, 
                 call.message.message_id, 
                 reply_markup=markup
             )
+            
         except Exception as e:
-            bot.send_message(call.message.chat.id, f"❌ Помилка завантаження черг: {e}")
+            print(f"Помилка завантаження черг: {e}")
+            bot.send_message(call.message.chat.id, f"❌ Не вдалося отримати дані з сервера. Спробуйте пізніше.")
 
     elif call.data.startswith("queue_"):
-        settings['queue'] = call.data.split("_")[1]
+        # Отримуємо повний ключ (напр. GPV4.1)
+        queue_key = call.data.split("_")[1]
+        settings['queue'] = queue_key
         save_settings(settings)
-        bot.edit_message_text(f"✅ Налаштовано! Місто: {settings['city']}, Черга: {settings['queue']}", call.message.chat.id, call.message.message_id)
+        
+        bot.answer_callback_query(call.id, f"✅ Чергу {queue_key.replace('GPV', '')} обрано!")
+        # Виводимо підтвердження з чистим номером
+        bot.edit_message_text(f"✅ Налаштування завершено!\nМісто: {settings['city']}\nЧерга: {queue_key.replace('GPV', '')}", 
+                              call.message.chat.id, call.message.message_id)
 
     elif call.data == "exec_update":
         if call.from_user.id in ADMIN_IDS:
