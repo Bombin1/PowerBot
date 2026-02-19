@@ -99,9 +99,9 @@ def format_schedule(data, queue_name):
     text = ""
     for status, s, e in schedule_blocks:
         if status == "no":
-            icon, desc = "🟢", "Світло є"
-        elif status == "yes":
             icon, desc = "🔴", "Відключення"
+        elif status == "yes":
+            icon, desc = "🟢", "Світло Є"
         else:
             icon = "🟡"
             desc = time_types.get(status, "Можливе відключення")
