@@ -59,25 +59,39 @@ def save_settings(settings):
 # --- [ ПАРСИНГ ГРАФІКА ] ---
 
 def format_schedule(data, queue_name):
-    """Об'єднує години в блоки та формує текст розкладу"""
-    time_zones = data.get("time_zone", {})
-    time_types = data.get("time_type", {})
-    queue_data = data.get(queue_name, {})
+    """Об'єднує години в блоки та формує текст розкладу (виправлено для Хмельницького)"""
     
+    # 1. ШУКАЄМО ДАНІ ЧЕРГИ
+    queue_data = data.get(queue_name)
+    
+    # Якщо в корені немає, шукаємо в структурі Хмельницького (fact -> data -> timestamp)
+    if not queue_data and 'fact' in data and 'data' in data['fact']:
+        fact_data = data['fact']['data']
+        if fact_data:
+            first_ts = list(fact_data.keys())[0]
+            queue_data = fact_data[first_ts].get(queue_name)
+
     if not queue_data:
-        return "❌ Дані для вашої черги не знайдені."
+        return f"❌ Дані для черги {queue_name} не знайдені."
+
+    # 2. ОТРИМУЄМО НАЗВИ ТА ЧАСОВІ ПОЯСИ
+    time_zones = data.get("time_zone", {})
+    # Для Хмельницького типи часто в data['preset']['time_type']
+    time_types = data.get("time_type", {})
+    if not time_types and 'preset' in data:
+        time_types = data['preset'].get('time_type', {})
 
     schedule_blocks = []
     current_status = None
     start_time = None
     
-    # Цикл по 24 годинах
+    # 3. ЛОГІКА ГРУПУВАННЯ В БЛОКИ
     for i in range(1, 25):
         key = str(i)
         status = queue_data.get(key)
         
-        # Визначаємо часовий проміжок
-        if time_zones:
+        # Визначаємо час (з файлу або за замовчуванням)
+        if time_zones and key in time_zones:
             t_start = time_zones[key][1]
             t_end = time_zones[key][2]
         else:
@@ -93,11 +107,22 @@ def format_schedule(data, queue_name):
         if i == 24:
             schedule_blocks.append((current_status, start_time, t_end))
 
-    # Формуємо текст
-    text = f"📅 **Графік на сьогодні ({queue_name}):**\n\n"
+    # 4. ФОРМУЄМО ТЕКСТ З ІКОНКАМИ
+    text = f"📅 **Графік на сьогодні ({queue_name.replace('GPV', '')}):**\n\n"
+    
     for status, s, e in schedule_blocks:
-        icon = "🟢" if status == "yes" else "🔴" if status == "no" else "🟡"
-        desc = time_types.get(status, status)
+        # Логіка іконок: 
+        # У Хмельницькому "no" - світло є (зелений), "yes" - обмеження (червоний)
+        if status == "no":
+            icon = "🟢"
+            desc = "Світло є"
+        elif status == "yes":
+            icon = "🔴"
+            desc = "Відключення"
+        else:
+            icon = "🟡"
+            desc = time_types.get(status, "Можливе відключення")
+            
         text += f"{icon} **{s} - {e}** — {desc}\n"
     
     return text
