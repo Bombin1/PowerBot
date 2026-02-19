@@ -59,25 +59,16 @@ def save_settings(settings):
 # --- [ ПАРСИНГ ГРАФІКА ] ---
 
 def format_schedule(data, queue_name):
-    """Об'єднує години в блоки, використовуючи ключ 'today' для точності"""
-    
+    """Об'єднує години в блоки (без заголовка)"""
     queue_data = None
     
-    # 1. ШУКАЕМО ДАНІ
-    # Перевіряємо структуру Хмельницького (fact -> data)
+    # 1. ШУКАЄМО ДАНІ
     if 'fact' in data and 'data' in data['fact']:
         fact_data = data['fact']['data']
-        # Отримуємо ID сьогоднішнього дня з ключа "today"
         today_id = str(data['fact'].get('today', ''))
-        
         if today_id in fact_data:
             queue_data = fact_data[today_id].get(queue_name)
-        else:
-            # Якщо "today" не знайдено, беремо перший доступний як запасний
-            first_ts = list(fact_data.keys())[0]
-            queue_data = fact_data[first_ts].get(queue_name)
-            
-    # Якщо структура звичайна (Київ і т.д.)
+    
     if not queue_data:
         queue_data = data.get(queue_name)
 
@@ -94,7 +85,6 @@ def format_schedule(data, queue_name):
     current_status = None
     start_time = None
     
-    # 3. ГРУПУВАННЯ ГОДИН
     for i in range(1, 25):
         key = str(i)
         status = queue_data.get(key)
@@ -115,11 +105,9 @@ def format_schedule(data, queue_name):
         if i == 24:
             schedule_blocks.append((current_status, start_time, t_end))
 
-    # 4. ФОРМУВАННЯ ТЕКСТУ
-    text = f"📅 **Графік на сьогодні ({queue_name.replace('GPV', '')}):**\n\n"
-    
+    # 4. ФОРМУВАННЯ ТЕКСТУ (Тут тепер ТІЛЬКИ список годин)
+    text = "" 
     for status, s, e in schedule_blocks:
-        # У Хмельницькому: "no" - світло є (🟢), "yes" - обмеження (🔴)
         if status == "no":
             icon = "🟢"
             desc = "Світло є"
@@ -138,8 +126,8 @@ def format_schedule(data, queue_name):
 
 def monitoring_loop():
     global last_power_state
-    last_check_hour = -1  # Для відстеження години
-    last_schedule_text = "" # Для порівняння змін графіка
+    last_check_hour = -1
+    last_schedule_text = ""
     
     info = get_battery_info()
     if info: last_power_state = info["plugged"]
@@ -158,32 +146,26 @@ def monitoring_loop():
             settings = load_settings()
             
             if settings.get("notifications") and settings.get("city"):
-                # Перевіряємо раз на годину
                 if now.hour != last_check_hour:
                     try:
                         r = requests.get(CITY_SOURCES[settings['city']], timeout=15)
                         if r.status_code == 200:
                             data = r.json()
-                            # Отримуємо чистий графік (без заголовка всередині функції format_schedule)
                             current_schedule = format_schedule(data, settings['queue'])
                             
-                            # Перевіряємо на оновлення
                             if current_schedule != last_schedule_text:
-                                # Отримуємо номер черги без GPV (наприклад, 4.1)
-                                q_name = settings['queue'].replace('GPV', '')
+                                q_num = settings['queue'].replace('GPV', '')
                                 
-                                # Формуємо заголовок згідно з твоїм проханням
+                                # Твій формат заголовка
                                 if not last_schedule_text:
-                                    header = f"📅 **Графік на сьогодні**\n**Твоя черга ({q_name}):**"
+                                    header = f"📅 **Графік на сьогодні ({q_num}):**"
                                 else:
-                                    header = f"⚠️ **Графік оновлено!**\n**Твоя черга ({q_name}):**"
+                                    header = f"⚠️ **Графік оновлено ({q_num}):**"
                                 
-                                # Надсилаємо фінальне повідомлення
+                                # Відправка: Заголовок + 2 переноси рядка + Тіло графіка
                                 bot.send_message(CHAT_ID, f"{header}\n\n{current_schedule}", parse_mode="Markdown")
                                 
                                 last_schedule_text = current_schedule
-                                
-                                # Оновлюємо локальний файл
                                 with open(LOCAL_SCHEDULE_FILE, 'w', encoding='utf-8') as f:
                                     json.dump(data, f, ensure_ascii=False)
                             
@@ -193,12 +175,8 @@ def monitoring_loop():
 
             time.sleep(30)
         except Exception as e:
-            if 'send_error_to_admin' in globals():
-                send_error_to_admin(f"Помилка моніторингу: {e}")
-            else:
-                print(f"Помилка моніторингу: {e}")
+            print(f"Помилка моніторингу: {e}")
             time.sleep(10)
-
 def check_schedule_updates(settings):
     try:
         url = CITY_SOURCES[settings['city']]
