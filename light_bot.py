@@ -197,45 +197,40 @@ def callback_handler(call):
         settings['city'] = city
         save_settings(settings)
         
-        bot.answer_callback_query(call.id, f"Завантажую черги для м. {city}...")
+        bot.answer_callback_query(call.id, f"📥 Завантаження для м. {city}...")
         
         try:
-            r = requests.get(CITY_SOURCES[city], timeout=10)
+            r = requests.get(CITY_SOURCES[city], timeout=15)
+            r.encoding = 'utf-8' # Примусово встановлюємо кодування
             r.raise_for_status()
             data = r.json()
             
-            # Зберігаємо завантажений графік локально, щоб /status міг його прочитати
-            with open(LOCAL_SCHEDULE_FILE, 'w') as f:
-                json.dump(data, f)
+            # ЗБЕРІГАЄМО ЛОКАЛЬНО
+            with open(LOCAL_SCHEDULE_FILE, 'w', encoding='utf-8') as f:
+                json.dump(data, f, ensure_ascii=False, indent=4)
             
-            # Фільтруємо: тільки ключі GPV
-            queues = [k for k in data.keys() if k.startswith('GPV')]
+            # ФІЛЬТРАЦІЯ (шукаємо ключі, що містять GPV)
+            queues = [k for k in data.keys() if 'GPV' in k]
             queues.sort()
             
             if not queues:
-                bot.edit_message_text("❌ Активних черг GPV не знайдено.", call.message.chat.id, call.message.message_id)
+                # Додаткова спроба: якщо GPV не знайдено, виведемо всі ключі крім технічних
+                exclude = ['regionId', 'lastUpdated', 'fact', 'preset', 'time_zone', 'time_type']
+                queues = [k for k in data.keys() if k not in exclude]
+            
+            if not queues:
+                bot.edit_message_text("❌ Дані черг наразі відсутні у джерелі.", call.message.chat.id, call.message.message_id)
                 return
 
             markup = types.InlineKeyboardMarkup(row_width=3)
-            btns = []
-            for q in queues:
-                # ВАЖЛИВО: текст "4.1", а callback_data "queue_GPV4.1"
-                btns.append(types.InlineKeyboardButton(
-                    text=q.replace('GPV', ''), 
-                    callback_data=f"queue_{q}"
-                ))
-            
+            btns = [types.InlineKeyboardButton(text=q.replace('GPV', ''), callback_data=f"queue_{q}") for q in queues]
             markup.add(*btns)
-            markup.add(types.InlineKeyboardButton(text="⬅️ Назад", callback_data="set_location"))
+            markup.add(types.InlineKeyboardButton(text="⬅️ Назад", callback_data="notify_on"))
 
-            bot.edit_message_text(
-                f"🔢 Оберіть чергу для м. {city}:", 
-                call.message.chat.id, 
-                call.message.message_id, 
-                reply_markup=markup
-            )
+            bot.edit_message_text(f"🔢 Оберіть чергу ({city}):", call.message.chat.id, call.message.message_id, reply_markup=markup)
+            
         except Exception as e:
-            bot.send_message(call.message.chat.id, f"❌ Помилка завантаження: {e}")
+            bot.send_message(call.message.chat.id, f"❌ Помилка зв'язку: {e}")
 
     # 2. ОБРОБКА ВИБОРУ ЧЕРГИ (ЗБЕРЕЖЕННЯ)
     elif call.data.startswith("queue_"):
