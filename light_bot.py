@@ -272,17 +272,24 @@ def handle_message(message):
 # --- [ СИСТЕМНІ ФУНКЦІЇ ] ---
 
 def update_bot(message):
+    """Просто вимикає бота, а menu.sh підхопить і оновить код силоміць"""
     if message.from_user.id not in ADMIN_IDS: return
     try:
-        subprocess.run(["cp", sys.argv[0], "light_bot_backup.py"])
-        subprocess.check_output(["git", "pull"], text=True)
-        os.execv(sys.executable, ['python'] + sys.argv)
-    except Exception as e: bot.reply_to(message, f"❌ Помилка: {e}")
+        bot.reply_to(message, "🚀 Виконую оновлення... Зачекайте 10-15 секунд.")
+        # Завершуємо процес. Bash-скрипт побачить це і зробить reset --hard
+        os._exit(0) 
+    except Exception as e:
+        bot.reply_to(message, f"❌ Помилка: {e}")
 
 def rollback_bot(message):
+    """Повертає бекап, якщо він є, і перезапускає бота"""
+    if message.from_user.id not in ADMIN_IDS: return
     if os.path.exists("light_bot_backup.py"):
         subprocess.run(["cp", "light_bot_backup.py", sys.argv[0]])
-        os.execv(sys.executable, ['python'] + sys.argv)
+        bot.reply_to(message, "🔙 Відкат виконано! Перезапуск...")
+        os._exit(0)
+    else:
+        bot.reply_to(message, "❌ Файл бекапу не знайдено.")
 
 if __name__ == "__main__":
     subprocess.run(["termux-wake-lock"])
