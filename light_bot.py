@@ -302,9 +302,9 @@ def callback_handler(call):
     elif call.data == "exec_update":
         if call.from_user.id in ADMIN_IDS:
             bot.answer_callback_query(call.id, "🚀 Запуск оновлення...")
-            bot.edit_message_text("📥 Виконую `git reset --hard` через Menu.sh... Бот перезапуститься за 5-10 сек.", call.message.chat.id, call.message.message_id)
+            bot.edit_message_text("🚀 **Оновлюю систему...**\nЗачекайте 10-15 секунд, бот перезавантажиться.", call.message.chat.id, call.message.message_id, parse_mode="Markdown")
             # Вихід з процесу. Menu.sh побачить це і запустить цикл оновлення
-            os._exit(0) 
+            os._exit(0)
 
     elif call.data == "exec_rollback":
         if call.from_user.id in ADMIN_IDS:
