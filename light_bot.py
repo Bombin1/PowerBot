@@ -162,27 +162,6 @@ def monitoring_loop():
         except Exception as e:
             print(f"Помилка моніторингу: {e}")
             time.sleep(10)
-def check_schedule_updates(settings):
-    try:
-        url = CITY_SOURCES[settings['city']]
-        r = requests.get(url, timeout=10)
-        if r.status_code == 200:
-            new_data = r.json()
-            new_hash = hash(str(new_data.get(settings['queue'])))
-            
-            # Перевірка на 06:00 ранку
-            is_morning = datetime.now().hour == 6 and datetime.now().minute < 5
-            
-            if new_hash != settings.get("last_hash") or is_morning:
-                text = format_schedule(new_data, settings['queue'])
-                bot.send_message(CHAT_ID, text, parse_mode="Markdown")
-                
-                settings['last_hash'] = new_hash
-                save_settings(settings)
-                with open(LOCAL_SCHEDULE_FILE, 'w', encoding='utf-8') as f:
-                    json.dump(new_data, f)
-    except:
-        pass
 
 # --- [ АДМІН-МЕНЮ /SET ] ---
 
@@ -193,7 +172,7 @@ def admin_settings(message):
     markup = types.InlineKeyboardMarkup(row_width=2)
     btn_graph = types.InlineKeyboardButton("📊 Графік", callback_data="set_graph")
     btn_upd = types.InlineKeyboardButton("🔄 Оновлення", callback_data="exec_update")
-    btn_roll = types.InlineKeyboardButton("🔙 Відкат", callback_data="exec_rollback")
+    btn_roll = types.InlineKeyboardButton("↩️ Відкат", callback_data="exec_rollback")
     
     markup.add(btn_graph)
     markup.add(btn_upd, btn_roll)
