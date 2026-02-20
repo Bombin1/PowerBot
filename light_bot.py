@@ -186,14 +186,14 @@ def check_schedule_updates(settings):
 
 # --- [ АДМІН-МЕНЮ /SET ] ---
 
-@bot.message_handler(commands=['set'])
+@bot.message_handler(func=lambda message: message.text in ["/set", "⚙️"])
 def admin_settings(message):
     if message.from_user.id not in ADMIN_IDS: return
     
     markup = types.InlineKeyboardMarkup(row_width=2)
     btn_graph = types.InlineKeyboardButton("📊 Графік", callback_data="set_graph")
-    btn_upd = types.InlineKeyboardButton("🔄 Оновити бот", callback_data="exec_update")
-    btn_roll = types.InlineKeyboardButton("🔙 Відкатитись", callback_data="exec_rollback")
+    btn_upd = types.InlineKeyboardButton("🔄 Оновлення", callback_data="exec_update")
+    btn_roll = types.InlineKeyboardButton("🔙 Відкат", callback_data="exec_rollback")
     
     markup.add(btn_graph)
     markup.add(btn_upd, btn_roll)
@@ -337,7 +337,7 @@ def get_battery_info():
         }
     except: return None
 
-@bot.message_handler(commands=['help'])
+@bot.message_handler(func=lambda message: message.text in ["/help", "❓"])
 def help_command(message):
     user_id = message.from_user.id
     help_text = "📜 **Команди:**\n• 💡 або 🛎️ — Статус світла.\n• ❓ `/help` — Допомога."
@@ -350,7 +350,7 @@ def help_command(message):
 @bot.message_handler(func=lambda message: True)    
 def handle_message(message):
     text = message.text.lower().strip()
-    if any(x in text for x in ["💡", "🛎️"]) or text == "/status":
+    if any(x in text for x in ["💡", "🛎️", "Є світло?"]) or text == "/status":
         info = get_battery_info()
         if info:
             status = "Є" if info["plugged"] else "НЕМАЄ"
