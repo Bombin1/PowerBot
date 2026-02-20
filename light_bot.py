@@ -342,7 +342,7 @@ def help_command(message):
     user_id = message.from_user.id
     help_text = "📜 **Команди:**\n• 💡 або 🛎️ — Статус світла.\n• ❓ `/help` — Допомога."
     if user_id in ADMIN_IDS:
-        help_text += "\n\n🛠️ **Адмін-панель:**\n• `/set` — Налаштування графіка та бота."
+        help_text += "\n\n🛠️ **Адмін-панель:**\n• ⚙️ `/set` — Налаштування графіка та бота."
     
     help_text += f"\n\n🔗 [GitHub]({REPO_URL}) | ☕ [На каву]({MONO_URL})"
     bot.reply_to(message, help_text, parse_mode="Markdown", disable_web_page_preview=True)
@@ -353,10 +353,13 @@ def handle_message(message):
     if any(x in text for x in ["💡", "🛎️", "Є світло?"]) or text == "/status":
         info = get_battery_info()
         if info:
-            status = "Є" if info["plugged"] else "НЕМАЄ"
-            icon = "💡" if info["plugged"] else "🕯️"
+            if info["plugged"]:
+                status_text = "💡 **Світло є**"
+            else:
+                status_text = "🕯️ **Світла немає**"
+            
             percent = info['percent']
-            reply = f"{icon} **Світло {status}**\n🔋: {percent}% | 🌡️: ~{info['temp']}°C"        
+            reply = f"{status_text}\n🔋: {percent}% | 🌡️: ~{info['temp']}°C"        
             bot.reply_to(message, reply, parse_mode="Markdown")
 
 # --- [ СИСТЕМНІ ФУНКЦІЇ ] ---
