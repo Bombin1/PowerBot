@@ -349,7 +349,7 @@ def help_command(message):
 
 @bot.message_handler(func=lambda message: True)    
 def handle_message(message):
-    text = message.text.lower().strip()
+    text = message.text
     if any(x in text for x in ["💡", "🛎️", "Є світло?"]) or text == "/status":
         info = get_battery_info()
         if info:
