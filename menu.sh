@@ -68,11 +68,8 @@ while true; do
             while true; do
                 python "$BOT_FILE"
                 EXIT_CODE=$?
-                # Якщо бот вийшов нормально (0), перевіряємо чи не треба оновитись
                 if [ $EXIT_CODE -eq 0 ]; then
-                    echo "♻️ Перевірка оновлень або плановий перезапуск..."
-                    # Можна додати автоматичний git pull тут
-                    git fetch --all && git reset --hard origin/main
+                    echo "♻️ Перезапуск за запитом бота..."
                     sleep 2
                 else
                     echo "⚠️ Бот впав (код $EXIT_CODE). Перезапуск через 5 сек..."
