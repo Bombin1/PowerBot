@@ -143,11 +143,15 @@ def monitoring_loop():
                             # Публікуємо ТІЛЬКИ якщо текст змінився
                             if current_schedule and current_schedule != last_schedule_text:
                                 q_num = settings['queue'].replace('GPV', '')
-                                # Якщо це перша запуск або зміна о 00:00 — заголовок "на сьогодні"
-                                # Якщо зміна вдень — заголовок "оновлено"
-                                header_type = "📅 **Графік на сьогодні**" if not last_schedule_text or now.hour == 0 else "⚠️ **Графік оновлено**"
+            
+                                # Визначаємо заголовок (нічне вікно 00:00 - 04:00 для нових графіків)
+                                if not last_schedule_text or (0 <= now.hour < 4):
+                                    header_type = "📅 **Графік на сьогодні**"
+                                else:
+                                    header_type = "⚠️ **Графік оновлено**"
+            
                                 header = f"{header_type} ({q_num}):"
-                                
+            
                                 bot.send_message(CHAT_ID, f"{header}\n\n{current_schedule}", parse_mode="Markdown")
                                 
                                 last_schedule_text = current_schedule
