@@ -169,34 +169,94 @@ def monitoring_loop():
 
 # --- [ АДМІН-МЕНЮ /SET ] ---
 
-@bot.message_handler(func=lambda message: message.text in ["/set", "⚙️"])
+def get_update_keyboard():
+    markup = types.InlineKeyboardMarkup(row_width=2)
+    markup.add(
+        types.InlineKeyboardButton("🤖 Бот", callback_data="upd_bot"),
+        types.InlineKeyboardButton("🛫 Лаунчер", callback_data="upd_launcher")
+    )
+    markup.add(types.InlineKeyboardButton("⬅️ Назад", callback_data="back_to_main_set"))
+    return markup
+
+def get_rollback_keyboard():
+    markup = types.InlineKeyboardMarkup(row_width=2)
+    markup.add(
+        types.InlineKeyboardButton("🤖 Бот", callback_data="rb_bot"),
+        types.InlineKeyboardButton("🛫 Лаунчер", callback_data="rb_launcher")
+    )
+    markup.add(types.InlineKeyboardButton("⬅️ Назад", callback_data="back_to_main_set"))
+    return markup
+@bot.message_handler(func=lambda message: message.text in ["/set", "⚙️"])    
 def admin_settings(message):
     if message.from_user.id not in ADMIN_IDS: return
     
     markup = types.InlineKeyboardMarkup(row_width=2)
-    btn_graph = types.InlineKeyboardButton("📊 Графік", callback_data="set_graph")
-    btn_upd = types.InlineKeyboardButton("🔄 Оновлення", callback_data="exec_update")
-    btn_roll = types.InlineKeyboardButton("↩️ Відкат", callback_data="exec_rollback")
+    markup.add(types.InlineKeyboardButton("📊 Графік", callback_data="set_graph"))
+    markup.add(types.InlineKeyboardButton("🔄 Оновлення", callback_data="exec_update"),
+               types.InlineKeyboardButton("↩️ Відкат", callback_data="exec_rollback"))
     
-    markup.add(btn_graph)
-    markup.add(btn_upd, btn_roll)
     bot.send_message(message.chat.id, "🛠️ **Адмін-панель:**", reply_markup=markup, parse_mode="Markdown")
 
 @bot.callback_query_handler(func=lambda call: True)
 def callback_handler(call):
     settings = load_settings()
 
+    # --- ГОЛОВНЕ МЕНЮ /SET ---
     if call.data == "set_graph":
         markup = types.InlineKeyboardMarkup()
         markup.add(types.InlineKeyboardButton("✅ Увімкнути", callback_data="notify_on"),
                    types.InlineKeyboardButton("❌ Вимкнути", callback_data="notify_off"))
         bot.edit_message_text("Дзвоник сповіщень про графік:", call.message.chat.id, call.message.message_id, reply_markup=markup)
 
+    elif call.data == "exec_update":
+        if call.from_user.id in ADMIN_IDS:
+            bot.edit_message_text("🔄 **Що саме оновити?**", call.message.chat.id, call.message.message_id, reply_markup=get_update_keyboard(), parse_mode="Markdown")
+
+    elif call.data == "exec_rollback":
+        if call.from_user.id in ADMIN_IDS:
+            bot.edit_message_text("↩️ **Що саме відкотити?**", call.message.chat.id, call.message.message_id, reply_markup=get_rollback_keyboard(), parse_mode="Markdown")
+
+    elif call.data == "back_to_main_set":
+        markup = types.InlineKeyboardMarkup(row_width=2)
+        markup.add(types.InlineKeyboardButton("📊 Графік", callback_data="set_graph"))
+        markup.add(types.InlineKeyboardButton("🔄 Оновлення", callback_data="exec_update"),
+                   types.InlineKeyboardButton("↩️ Відкат", callback_data="exec_rollback"))
+        bot.edit_message_text("🛠️ **Адмін-панель:**", call.message.chat.id, call.message.message_id, reply_markup=markup, parse_mode="Markdown")
+
+    # --- ЛОГІКА ОНОВЛЕННЯ ---
+    elif call.data == "upd_bot":
+        bot.edit_message_text("🚀 **Робимо бекап та оновлюємо бота...**\nЗачекайте 10 сек.", call.message.chat.id, call.message.message_id, parse_mode="Markdown")
+        os.system("cp light_bot.py light_bot.py.bak")
+        os.system("git checkout origin/main -- light_bot.py")
+        os._exit(0)
+
+    elif call.data == "upd_launcher":
+        bot.edit_message_text("🛫 **Оновлюю лаунчер...**", call.message.chat.id, call.message.message_id, parse_mode="Markdown")
+        os.system("cp Menu.sh Menu.sh.bak")
+        os.system("git checkout origin/main -- Menu.sh && chmod +x Menu.sh")
+        bot.edit_message_text("✅ **Лаунчер оновлено!**\nБекап створено, права (chmod +x) відновлено.", 
+                              call.message.chat.id, call.message.message_id, reply_markup=get_update_keyboard(), parse_mode="Markdown")
+
+    # --- ЛОГІКА ВІДКАТУ ---
+    elif call.data == "rb_bot":
+        if os.path.exists("light_bot.py.bak"):
+            bot.edit_message_text("↩️ **Відновлюю бота з бекапу...**", call.message.chat.id, call.message.message_id, parse_mode="Markdown")
+            os.system("cp light_bot.py.bak light_bot.py")
+            os._exit(0)
+        else: bot.answer_callback_query(call.id, "❌ Бекап бота не знайдено!", show_alert=True)
+
+    elif call.data == "rb_launcher":
+        if os.path.exists("Menu.sh.bak"):
+            os.system("cp Menu.sh.bak Menu.sh && chmod +x Menu.sh")
+            bot.edit_message_text("✅ **Лаунчер відновлено!**\nПрава доступу відновлено.", 
+                                  call.message.chat.id, call.message.message_id, reply_markup=get_rollback_keyboard(), parse_mode="Markdown")
+        else: bot.answer_callback_query(call.id, "❌ Бекап лаунчера не знайдено!", show_alert=True)
+
+    # --- НАЛАШТУВАННЯ МІСТ ТА ЧЕРГ (Твій робочий код) ---
     elif call.data.startswith("notify_"):
         settings['notifications'] = (call.data == "notify_on")
         save_settings(settings)
         if settings['notifications']:
-            # Показуємо міста по 2 в ряд
             markup = types.InlineKeyboardMarkup(row_width=2)
             btns = [types.InlineKeyboardButton(city, callback_data=f"city_{city}") for city in CITY_SOURCES.keys()]
             markup.add(*btns)
@@ -204,100 +264,37 @@ def callback_handler(call):
         else:
             bot.edit_message_text("🔕 Сповіщення вимкнено.", call.message.chat.id, call.message.message_id)
 
-    # 1. ОБРОБКА ВИБОРУ МІСТА
     elif call.data.startswith("city_"):
         city = call.data.split("_")[1]
-        settings = load_settings()
         settings['city'] = city
         save_settings(settings)
-        
         bot.answer_callback_query(call.id, f"📥 Завантаження для м. {city}...")
-        
         try:
             r = requests.get(CITY_SOURCES[city], timeout=15)
             r.encoding = 'utf-8'
             data = r.json()
-            
-            # ЗБЕРІГАЄМО ЛОКАЛЬНО
             with open(LOCAL_SCHEDULE_FILE, 'w', encoding='utf-8') as f:
                 json.dump(data, f, ensure_ascii=False, indent=4)
-            
-            # --- НОВА ЛОГІКА ПОШУКУ ЧЕРГ ---
-            queues = []
-            
-            # Спроба 1: Якщо черги в корені (як у Києві)
             queues = [k for k in data.keys() if 'GPV' in k]
-            
-            # Спроба 2: Якщо черги заховані в fact -> data (як у Хмельницькому)
             if not queues and 'fact' in data:
                 fact_data = data['fact'].get('data', {})
-                # Беремо перший доступний ключ з цифрами (timestamp)
                 if fact_data:
-                    first_timestamp = list(fact_data.keys())[0]
-                    inner_data = fact_data[first_timestamp]
-                    queues = [k for k in inner_data.keys() if 'GPV' in k]
-            
+                    first_ts = list(fact_data.keys())[0]
+                    queues = [k for k in fact_data[first_ts].keys() if 'GPV' in k]
             queues.sort()
-            
-            if not queues:
-                bot.edit_message_text(f"❌ Не вдалося знайти черги у файлі {city}.", call.message.chat.id, call.message.message_id)
-                return
-
             markup = types.InlineKeyboardMarkup(row_width=3)
-            btns = []
-            for q in queues:
-                # Відображаємо "1.2", зберігаємо "GPV1.2"
-                display_name = q.replace('GPV', '')
-                btns.append(types.InlineKeyboardButton(text=display_name, callback_data=f"queue_{q}"))
-            
+            btns = [types.InlineKeyboardButton(text=q.replace('GPV', ''), callback_data=f"queue_{q}") for q in queues]
             markup.add(*btns)
-            markup.add(types.InlineKeyboardButton(text="⬅️ Назад", callback_data="set_location"))
-
             bot.edit_message_text(f"🔢 Оберіть чергу для м. {city}:", call.message.chat.id, call.message.message_id, reply_markup=markup)
-            
-        except Exception as e:
-            bot.send_message(call.message.chat.id, f"❌ Помилка: {e}")
+        except Exception as e: bot.send_message(call.message.chat.id, f"❌ Помилка: {e}")
 
-    # 2. ОБРОБКА ВИБОРУ ЧЕРГИ (ЗБЕРЕЖЕННЯ)
     elif call.data.startswith("queue_"):
-        queue_key = call.data.split("_")[1]  # Отримуємо ПОВНИЙ ключ (напр. GPV4.1)
-        settings = load_settings()
-        settings['queue'] = queue_key        # Зберігаємо саме повний ключ
+        queue_key = call.data.split("_")[1]
+        settings['queue'] = queue_key
         save_settings(settings)
-        
-        bot.answer_callback_query(call.id, "✅ Налаштування збережено!")
-        
-        # Гарний фінальний текст
-        res_text = (
-            "✅ **Налаштування завершено!**\n\n"
-            f"📍 Місто: {settings.get('city')}\n"
-            f"🔢 Черга: {queue_key.replace('GPV', '')}\n\n"
-            "Тепер ви можете перевірити статус командою /status"
-        )
-        
-        bot.edit_message_text(
-            res_text, 
-            call.message.chat.id, 
-            call.message.message_id, 
-            parse_mode="Markdown"
-        )
-
-    elif call.data == "exec_update":
-        if call.from_user.id in ADMIN_IDS:
-            bot.answer_callback_query(call.id, "🚀 Запуск оновлення...")
-            bot.edit_message_text("🚀 **Оновлюю систему...**\nЗачекайте 10-15 секунд, бот перезавантажиться.", call.message.chat.id, call.message.message_id, parse_mode="Markdown")
-            # Вихід з процесу. Menu.sh побачить це і запустить цикл оновлення
-            os._exit(0)
-
-    elif call.data == "exec_rollback":
-        if call.from_user.id in ADMIN_IDS:
-            if os.path.exists("light_bot_backup.py"):
-                bot.answer_callback_query(call.id, "⏪ Відкат до бекапу...")
-                subprocess.run(["cp", "light_bot_backup.py", "light_bot.py"])
-                bot.edit_message_text("✅ Бекап відновлено! Перезапуск...", call.message.chat.id, call.message.message_id)
-                os._exit(0)
-            else:
-                bot.answer_callback_query(call.id, "❌ Бекап не знайдено", show_alert=True)
+        bot.answer_callback_query(call.id, "✅ Збережено!")
+        bot.edit_message_text(f"✅ **Налаштування завершено!**\n📍 Місто: {settings['city']}\n🔢 Черга: {queue_key.replace('GPV', '')}", 
+                              call.message.chat.id, call.message.message_id, parse_mode="Markdown")
 
 # --- [ ІСНУЮЧІ ФУНКЦІЇ БАТАРЕЇ ТА ДОПОМОГИ ] ---
 
