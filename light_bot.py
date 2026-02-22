@@ -25,6 +25,7 @@ SETTINGS_FILE = 'user_settings.json'
 LOCAL_SCHEDULE_FILE = 'current_schedule.json'
 VERSION = "1.0.0"  # Поточна версія бота
 VERSION_URL = "https://raw.githubusercontent.com/Bombin1/PowerBot/main/version.txt"
+CHANGELOG_URL = "https://raw.githubusercontent.com/Bombin1/PowerBot/main/changelog.txt"
 last_update_check_day = None  # Щоб знати, чи перевіряли ми сьогодні
 
 # --- [ СПИСОК МІСТ ТА ПОСИЛАНЬ ] ---
@@ -118,7 +119,6 @@ def check_updates_for_admin():
     global last_update_check_day
     current_day = datetime.now().date()
 
-    # Перевіряємо лише якщо настав новий день
     if last_update_check_day == current_day:
         return
 
@@ -129,15 +129,25 @@ def check_updates_for_admin():
             last_update_check_day = current_day
             
             if github_version > VERSION:
+                # Намагаємось отримати опис змін
+                changelog = "Опис змін доступний на GitHub."
+                try:
+                    ch_resp = requests.get(CHANGELOG_URL, timeout=10)
+                    if ch_resp.status_code == 200:
+                        changelog = ch_resp.text.strip()
+                except: pass
+
                 msg = (f"🚀 **Доступне оновлення бота!**\n\n"
                        f"Поточна версія: `{VERSION}`\n"
                        f"Нова версія: `{github_version}`\n\n"
+                       f"📝 **Що нового:**\n{changelog}\n\n"
                        f"Натисніть `/set` -> 🔄 Оновлення")
+                
                 for admin_id in ADMIN_IDS:
                     try: bot.send_message(admin_id, msg, parse_mode="Markdown")
                     except: pass
     except:
-        last_update_check_day = current_day # Щоб не довбати GitHub при помилках мережі
+        last_update_check_day = current_day
 
 def monitoring_loop():
     global last_power_state
@@ -349,7 +359,7 @@ def get_battery_info():
 @bot.message_handler(func=lambda message: message.text in ["/help", "❓"])
 def help_command(message):
     user_id = message.from_user.id
-    help_text = "📜 **Команди:**\n• 💡 або 🛎️ — Статус світла.\n• ❓ `/help` — Допомога."
+    help_text = f"📜 **Команди (v{VERSION}):**\n• 💡 або 🛎️ — Статус світла.\n• ❓ `/help` — Допомога."
     if user_id in ADMIN_IDS:
         help_text += "\n\n🛠️ **Адмін-панель:**\n• ⚙️ `/set` — Налаштування графіка та бота."
     
