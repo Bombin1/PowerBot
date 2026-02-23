@@ -119,45 +119,43 @@ def check_updates_for_admin():
     global last_update_check_day
     current_day = datetime.now().date()
 
-    # Якщо сьогодні вже перевіряли успішно — відпочиваємо
     if last_update_check_day == current_day:
         return
 
     try:
-        # 1. Тягнемо ТІЛЬКИ текст із файлу version.txt на GitHub
         response = requests.get(VERSION_URL, timeout=10)
-        if response.status_code == 200:
-            github_version = response.text.strip() # Це цифра з інтернету (напр. "2.8")
-            
-            # 2. VERSION — це константа в коді бота ПРЯМО НА ТЕЛЕФОНІ (напр. "2.7")
-            if github_version != VERSION:
-                
-                # Якщо цифри різні, тягнемо текст змін
-                changelog_text = "Опис змін доступний на GitHub."
+        if response.status_code != 200:
+            return
+
+        github_version = response.text.strip()
+
+        if version_tuple(github_version) > version_tuple(VERSION):
+
+            changelog_text = "Опис змін доступний на GitHub."
+            try:
+                ch_resp = requests.get(CHANGELOG_URL, timeout=10)
+                if ch_resp.status_code == 200:
+                    changelog_text = ch_resp.text.strip()
+            except:
+                pass
+
+            msg = (
+                f"🚀 **Доступне оновлення!**\n\n"
+                f"Ваша версія: `{VERSION}`\n"
+                f"Нова версія: `{github_version}`\n\n"
+                f"📝 **Що нового:**\n{changelog_text}\n\n"
+                f"Оновити: `/set` -> 🔄 Оновлення"
+            )
+
+            for admin_id in ADMIN_IDS:
                 try:
-                    ch_resp = requests.get(CHANGELOG_URL, timeout=10)
-                    if ch_resp.status_code == 200:
-                        changelog_text = ch_resp.text.strip()
+                    bot.send_message(admin_id, msg, parse_mode="Markdown")
                 except:
                     pass
 
-                msg = (f"🚀 **Доступне оновлення!**\n\n"
-                       f"Ваша версія: `{VERSION}`\n"
-                       f"Нова версія: `{github_version}`\n\n"
-                       f"📝 **Що нового:**\n{changelog_text}\n\n"
-                       f"Оновити: `/set` -> 🔄 Оновлення")
+        last_update_check_day = current_day
 
-                # Відправляємо адмінам
-                for admin_id in ADMIN_IDS:
-                    try:
-                        bot.send_message(admin_id, msg, parse_mode="Markdown")
-                    except:
-                        pass
-            
-            # Ставимо мітку УСПІШНОЇ перевірки, щоб не смикати Гіт до завтра
-            last_update_check_day = current_day
-    except Exception:
-        # Якщо немає інету — просто виходимо, мітку дня НЕ ставимо, щоб спробувати пізніше
+    except:
         pass
 
 def monitoring_loop():
