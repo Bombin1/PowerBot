@@ -148,7 +148,7 @@ def check_updates_for_admin():
                 
                 for admin_id in ADMIN_IDS:
                     try: 
-                        bot.send_message(admin_id, msg, parse_mode="Markdown")
+                        bot.send_message(admin_id, msg)
                     except: 
                         pass
             
