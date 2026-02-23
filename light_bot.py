@@ -23,7 +23,7 @@ MONO_URL = "https://send.monobank.ua/jar/8WFAPWLdPu"
 
 SETTINGS_FILE = 'user_settings.json'
 LOCAL_SCHEDULE_FILE = 'current_schedule.json'
-VERSION = "2.7"  # Поточна версія бота
+VERSION = "2.6"  # Поточна версія бота
 VERSION_URL = "https://raw.githubusercontent.com/Bombin1/PowerBot/main/version.txt"
 CHANGELOG_URL = "https://raw.githubusercontent.com/Bombin1/PowerBot/main/changelog.txt"
 last_update_check_day = None  # Щоб знати, чи перевіряли ми сьогодні
@@ -119,18 +119,20 @@ def check_updates_for_admin():
     global last_update_check_day
     current_day = datetime.now().date()
 
+    # Якщо сьогодні вже перевіряли успішно — відпочиваємо
     if last_update_check_day == current_day:
         return
 
     try:
-        # 1. Отримуємо версію з GitHub
+        # 1. Тягнемо ТІЛЬКИ текст із файлу version.txt на GitHub
         response = requests.get(VERSION_URL, timeout=10)
         if response.status_code == 200:
-            github_version = response.text.strip()
+            github_version = response.text.strip() # Це цифра з інтернету (напр. "2.8")
             
-            # 2. ПОРІВНЮЄМО: локальна VERSION проти версії з GitHub
+            # 2. VERSION — це константа в коді бота ПРЯМО НА ТЕЛЕФОНІ (напр. "2.7")
             if github_version != VERSION:
-                # Отримуємо ченджлог
+                
+                # Якщо цифри різні, тягнемо текст змін
                 changelog_text = "Опис змін доступний на GitHub."
                 try:
                     ch_resp = requests.get(CHANGELOG_URL, timeout=10)
@@ -145,15 +147,17 @@ def check_updates_for_admin():
                        f"📝 **Що нового:**\n{changelog_text}\n\n"
                        f"Оновити: `/set` -> 🔄 Оновлення")
 
+                # Відправляємо адмінам
                 for admin_id in ADMIN_IDS:
                     try:
                         bot.send_message(admin_id, msg, parse_mode="Markdown")
                     except:
                         pass
             
-            # Ставимо мітку, що сьогодні перевірка пройшла успішно
+            # Ставимо мітку УСПІШНОЇ перевірки, щоб не смикати Гіт до завтра
             last_update_check_day = current_day
-    except:
+    except Exception:
+        # Якщо немає інету — просто виходимо, мітку дня НЕ ставимо, щоб спробувати пізніше
         pass
 
 def monitoring_loop():
