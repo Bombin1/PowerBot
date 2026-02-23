@@ -23,7 +23,7 @@ MONO_URL = "https://send.monobank.ua/jar/8WFAPWLdPu"
 
 SETTINGS_FILE = 'user_settings.json'
 LOCAL_SCHEDULE_FILE = 'current_schedule.json'
-VERSION = "2.7"  # Поточна версія бота
+VERSION = "2.6"  # Поточна версія бота
 VERSION_URL = "https://raw.githubusercontent.com/Bombin1/PowerBot/main/version.txt"
 CHANGELOG_URL = "https://raw.githubusercontent.com/Bombin1/PowerBot/main/changelog.txt"
 last_update_check_day = None  # Щоб знати, чи перевіряли ми сьогодні
@@ -119,44 +119,41 @@ def check_updates_for_admin():
     global last_update_check_day
     current_day = datetime.now().date()
 
-    # Якщо сьогодні вже була УСПІШНА перевірка — виходимо
     if last_update_check_day == current_day:
         return
 
     try:
-        # Робимо запит до файлу з версією
+        # 1. Отримуємо версію з GitHub
         response = requests.get(VERSION_URL, timeout=10)
         if response.status_code == 200:
-            # .strip() прибирає невидимі символи переносу рядка
             github_version = response.text.strip()
             
-            # Якщо версія просто відрізняється від поточної
+            # 2. ПОРІВНЮЄМО: локальна VERSION проти версії з GitHub
             if github_version != VERSION:
-                changelog = "Опис змін доступний на GitHub."
+                # Отримуємо ченджлог
+                changelog_text = "Опис змін доступний на GitHub."
                 try:
                     ch_resp = requests.get(CHANGELOG_URL, timeout=10)
                     if ch_resp.status_code == 200:
-                        changelog = ch_resp.text.strip()
-                except: 
+                        changelog_text = ch_resp.text.strip()
+                except:
                     pass
 
-                msg = (f"🚀 **Доступне оновлення бота!**\n\n"
-                       f"Поточна версія: `{VERSION}`\n"
+                msg = (f"🚀 **Доступне оновлення!**\n\n"
+                       f"Ваша версія: `{VERSION}`\n"
                        f"Нова версія: `{github_version}`\n\n"
-                       f"📝 **Що нового:**\n{changelog}\n\n"
-                       f"Натисніть `/set` -> 🔄 Оновлення")
-                
+                       f"📝 **Що нового:**\n{changelog_text}\n\n"
+                       f"Оновити: `/set` -> 🔄 Оновлення")
+
                 for admin_id in ADMIN_IDS:
-                    try: 
-                        bot.send_message(admin_id, msg)
-                    except: 
+                    try:
+                        bot.send_message(admin_id, msg, parse_mode="Markdown")
+                    except:
                         pass
             
-            # Тільки якщо ми отримали відповідь 200, ставимо мітку, що сьогодні перевіряли
+            # Ставимо мітку, що сьогодні перевірка пройшла успішно
             last_update_check_day = current_day
-            
-    except Exception as e:
-        # Якщо помилка мережі — НЕ ставимо мітку дня, щоб бот спробував ще раз у наступному циклі
+    except:
         pass
 
 def monitoring_loop():
