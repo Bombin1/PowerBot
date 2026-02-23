@@ -115,6 +115,9 @@ def format_schedule(data, queue_name):
 
 # --- [ ФОНОВІ ПРОЦЕСИ ] ---
 
+def version_tuple(v):
+    return tuple(map(int, v.strip().split(".")))
+
 def check_updates_for_admin():
     global last_update_check_day
     current_day = datetime.now().date()
