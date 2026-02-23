@@ -27,6 +27,7 @@ VERSION = "2.6"  # Поточна версія бота
 VERSION_URL = "https://raw.githubusercontent.com/Bombin1/PowerBot/main/version.txt"
 CHANGELOG_URL = "https://raw.githubusercontent.com/Bombin1/PowerBot/main/changelog.txt"
 last_update_check_day = None  # Щоб знати, чи перевіряли ми сьогодні
+last_notified_version = None  # Пам'ятаємо, про яку версію вже звітували
 
 # --- [ СПИСОК МІСТ ТА ПОСИЛАНЬ ] ---
 CITY_SOURCES = {
@@ -119,28 +120,30 @@ def version_tuple(v):
     return tuple(map(int, v.strip().split(".")))
 
 def check_updates_for_admin():
-    global last_update_check_day
+    global last_update_check_day, last_notified_version
     current_day = datetime.now().date()
 
     if last_update_check_day == current_day:
         return
 
     try:
-        response = requests.get(VERSION_URL, timeout=10)
+        response = requests.get(VERSION_URL, timeout=15) # Трохи збільшив таймаут для стабільності
         if response.status_code != 200:
             return
 
         github_version = response.text.strip()
 
         if version_tuple(github_version) > version_tuple(VERSION):
+            if last_notified_version == github_version:
+                return
 
             changelog_text = "Опис змін доступний на GitHub."
             try:
                 ch_resp = requests.get(CHANGELOG_URL, timeout=10)
                 if ch_resp.status_code == 200:
                     changelog_text = ch_resp.text.strip()
-            except:
-                pass
+            except Exception as e_ch:
+                print(f"[UPDATE ERROR] Помилка завантаження ченджлога: {e_ch}")
 
             msg = (
                 f"🚀 **Доступне оновлення!**\n\n"
@@ -153,13 +156,18 @@ def check_updates_for_admin():
             for admin_id in ADMIN_IDS:
                 try:
                     bot.send_message(admin_id, msg, parse_mode="Markdown")
-                except:
-                    pass
+                except Exception as e_msg:
+                    print(f"[UPDATE ERROR] Помилка відправки адміну {admin_id}: {e_msg}")
+            
+            last_notified_version = github_version
+            last_update_check_day = current_day
 
-        last_update_check_day = current_day
+        else:
+            last_update_check_day = current_day
 
-    except:
-        pass
+    except Exception as e:
+        # Головна помилка (наприклад, взагалі немає інтернету)
+        print(f"[UPDATE ERROR] Загальна помилка перевірки оновлень: {e}")
 
 def monitoring_loop():
     global last_power_state
