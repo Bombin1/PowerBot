@@ -23,7 +23,7 @@ MONO_URL = "https://send.monobank.ua/jar/8WFAPWLdPu"
 
 SETTINGS_FILE = 'user_settings.json'
 LOCAL_SCHEDULE_FILE = 'current_schedule.json'
-VERSION = "2.7"  # Поточна версія бота
+VERSION = "2.6"  # Поточна версія бота
 VERSION_URL = "https://raw.githubusercontent.com/Bombin1/PowerBot/main/version.txt"
 CHANGELOG_URL = "https://raw.githubusercontent.com/Bombin1/PowerBot/main/changelog.txt"
 last_update_check_day = None  # Щоб знати, чи перевіряли ми сьогодні
@@ -119,23 +119,26 @@ def check_updates_for_admin():
     global last_update_check_day
     current_day = datetime.now().date()
 
+    # Якщо сьогодні вже була УСПІШНА перевірка — виходимо
     if last_update_check_day == current_day:
         return
 
     try:
+        # Робимо запит до файлу з версією
         response = requests.get(VERSION_URL, timeout=10)
         if response.status_code == 200:
+            # .strip() прибирає невидимі символи переносу рядка
             github_version = response.text.strip()
-            last_update_check_day = current_day
             
-            if github_version > VERSION:
-                # Намагаємось отримати опис змін
+            # Якщо версія просто відрізняється від поточної
+            if github_version != VERSION:
                 changelog = "Опис змін доступний на GitHub."
                 try:
                     ch_resp = requests.get(CHANGELOG_URL, timeout=10)
                     if ch_resp.status_code == 200:
                         changelog = ch_resp.text.strip()
-                except: pass
+                except: 
+                    pass
 
                 msg = (f"🚀 **Доступне оновлення бота!**\n\n"
                        f"Поточна версія: `{VERSION}`\n"
@@ -144,10 +147,17 @@ def check_updates_for_admin():
                        f"Натисніть `/set` -> 🔄 Оновлення")
                 
                 for admin_id in ADMIN_IDS:
-                    try: bot.send_message(admin_id, msg, parse_mode="Markdown")
-                    except: pass
-    except:
-        last_update_check_day = current_day
+                    try: 
+                        bot.send_message(admin_id, msg, parse_mode="Markdown")
+                    except: 
+                        pass
+            
+            # Тільки якщо ми отримали відповідь 200, ставимо мітку, що сьогодні перевіряли
+            last_update_check_day = current_day
+            
+    except Exception as e:
+        # Якщо помилка мережі — НЕ ставимо мітку дня, щоб бот спробував ще раз у наступному циклі
+        pass
 
 def monitoring_loop():
     global last_power_state
