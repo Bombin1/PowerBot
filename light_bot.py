@@ -123,58 +123,57 @@ def check_updates_for_admin():
     global last_update_check_day, last_notified_version
     current_day = datetime.now().date()
 
-    # Якщо вже сьогодні повідомляли про оновлення — виходимо
+    # Якщо вже сьогодні успішно повідомили про ЦЮ версію — виходимо
     if last_update_check_day == current_day:
         return
 
     try:
         import random
+        # Анти-кеш
         v_url = f"{VERSION_URL}?nocache={random.randint(1,1000)}"
         response = requests.get(v_url, timeout=15)
+        
         if response.status_code != 200:
             return
 
-        # Очищаємо версію від зайвих символів
+        # Очищаємо версію
         github_version = "".join(filter(lambda x: x.isdigit() or x == '.', response.text.strip()))
 
-        # Порівняння локальної та віддаленої версії
+        # Порівнюємо
         if version_tuple(github_version) > version_tuple(VERSION):
+            # Якщо ми про ЦЮ версію вже писали в групу — не спамимо
             if last_notified_version == github_version:
                 return
 
-            # Отримуємо ченджлог
             changelog_text = "Опис змін доступний на GitHub."
             try:
                 ch_resp = requests.get(CHANGELOG_URL, timeout=10)
                 if ch_resp.status_code == 200:
                     changelog_text = ch_resp.text.strip()
             except Exception as e:
-                print(f"Помилка отримання ченджлога: {e}")
+                print(f"Помилка ченджлога: {e}")
 
-            # Формуємо повідомлення
             msg = (
-                f"🚀 **Доступне оновлення!**\n\n"
-                f"Ваша версія: `{VERSION}`\n"
+                f"🚀 **Доступне оновлення бота!**\n\n"
+                f"Поточна версія: `{VERSION}`\n"
                 f"Нова версія: `{github_version}`\n\n"
                 f"📝 **Що нового:**\n{changelog_text}\n\n"
-                f"Оновити: `/set` -> 🔄 Оновлення"
+                f"Оновити може адмін через: `/set` -> 🔄 Оновлення"
             )
 
-            # Надсилаємо всім адмінам
-            for admin_id in ADMIN_IDS:
-                try:
-                    bot.send_message(admin_id, msg, parse_mode="Markdown")
-                except Exception as e:
-                    print(f"Помилка відправки: {e}")
-
-            # Запам’ятовуємо, що вже повідомили
-            last_notified_version = github_version
-            last_update_check_day = current_day
+            # ВІДПРАВЛЯЄМО В ГРУПУ (CHAT_ID)
+            try:
+                bot.send_message(CHAT_ID, msg, parse_mode="Markdown")
+                
+                # Тільки після успішної відправки в групу ставимо мітки
+                last_notified_version = github_version
+                last_update_check_day = current_day
+                print(f"[UPDATE] Повідомлення про версію {github_version} надіслано в групу.")
+            except Exception as e:
+                print(f"[UPDATE ERROR] Не вдалося надіслати в CHAT_ID: {e}")
 
     except Exception as e:
         print(f"[UPDATE ERROR] {e}")
-        # Якщо треба бачити помилку в чаті:
-        # send_error_to_admin(f"Помилка в check_updates: {e}")
 
 def monitoring_loop():
     global last_power_state
