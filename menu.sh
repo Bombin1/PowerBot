@@ -2,6 +2,7 @@
 
 # Шлях до файлів
 BOT_FILE="$HOME/light_bot.py"
+chmod +x "$HOME/menu.sh" 2>/dev/null
 BACKUP_FILE="$HOME/light_bot_backup.py"
 CONFIG_FILE="$HOME/config.py"
 REPO_URL="https://github.com/Bombin1/PowerBot.git"
