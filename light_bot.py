@@ -404,7 +404,8 @@ def handle_message(message):
                 status_text = "🕯️ **Світла немає**"
             
             percent = info['percent']
-            reply = f"{status_text}\n🔋: {percent}% | 🌡️: ~{info['temp']}°C"        
+            temp_adjusted = info['temp'] - 2
+            reply = f"{status_text}\n🔋: {percent}% | 🌡️: ~{temp_adjusted}°C"        
             bot.reply_to(message, reply, parse_mode="Markdown")
 
 # --- [ СИСТЕМНІ ФУНКЦІЇ ] ---
