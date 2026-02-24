@@ -111,66 +111,64 @@ def format_schedule(data, queue_name):
 
 # --- [ ФОНОВІ ПРОЦЕСИ ] ---
 def version_tuple(v):
-    return tuple(map(int, v.strip().split(".")))
+    try:
+        # Видаляємо все, крім цифр і крапок, потім розбиваємо
+        clean_v = "".join(filter(lambda x: x.isdigit() or x == '.', str(v).strip()))
+        return tuple(map(int, clean_v.split(".")))
+    except:
+        return (0, 0) # Якщо помилка, повертаємо нульову версію
 
 def check_updates_for_admin(manual=False):
     global last_update_check_day, last_notified_version
     current_day = datetime.now().date()
     
-    # Якщо це автоматична перевірка і сьогодні вже перевіряли — виходимо
     if not manual and last_update_check_day == current_day: 
         return
 
     try:
-        # Використовуємо мітку часу time.time() та Headers для повного очищення кешу GitHub
+        # ПОВНЕ ОЧИЩЕННЯ КЕШУ: унікальний t + заголовки
         timestamp = int(time.time())
         v_url = f"{VERSION_URL}?t={timestamp}"
-        headers = {'Cache-Control': 'no-cache', 'Pragma': 'no-cache'}
+        headers = {
+            'Cache-Control': 'no-cache',
+            'Pragma': 'no-cache',
+            'User-Agent': f'PowerBot-Check-{timestamp}'
+        }
         
         response = requests.get(v_url, headers=headers, timeout=15)
         
         if response.status_code != 200:
-            if manual: 
-                send_tech_info("❌ Не вдалося отримати файл версії з GitHub.")
+            if manual: send_tech_info("❌ GitHub не відповів (404/500).")
             return
             
-        # Жорстка очистка тексту версії
-        github_version = "".join(filter(lambda x: x.isdigit() or x == '.', response.text.strip()))
+        github_version_raw = response.text.strip()
+        # Очищаємо від зайвого сміття (пробіли, \r, \n)
+        github_version = "".join(filter(lambda x: x.isdigit() or x == '.', github_version_raw))
         
-        # Для ручної перевірки виводимо лог, щоб адмін бачив процес
         if manual:
             send_tech_info(f"🔍 **Результат перевірки:**\nНа GitHub: `{github_version}`\nУ вас: `{VERSION}`")
 
+        # Порівнюємо кортежі (наприклад, (3, 1) > (3, 0))
         if version_tuple(github_version) > version_tuple(VERSION):
             if not manual and last_notified_version == github_version:
                 return
 
-            changelog_text = "Опис змін доступний на GitHub."
-            try:
-                ch_resp = requests.get(f"{CHANGELOG_URL}?t={timestamp}", headers=headers, timeout=10)
-                if ch_resp.status_code == 200: 
-                    changelog_text = ch_resp.text.strip()
-            except: 
-                pass
-
             msg = (
-                f"🚀 **Доступне оновлення бота!**\n\n"
-                f"Нова версія: `{github_version}`\n\n"
-                f"📝 **Що нового:**\n{changelog_text}\n\n"
-                f"Використайте `/set` -> Оновлення для встановлення."
+                f"🚀 **Доступне оновлення!**\n\n"
+                f"Нова версія: `{github_version}`\n"
+                f"Ваша версія: `{VERSION}`\n\n"
+                f"Встановіть через `/set` -> Оновлення"
             )
             send_tech_info(msg)
             last_notified_version = github_version
         elif manual:
-            send_tech_info(f"✅ **У вас актуальна версія:** `{VERSION}`")
+            send_tech_info(f"✅ **Версія актуальна.**")
         
-        # Запам'ятовуємо день автоматичної перевірки
         if not manual:
             last_update_check_day = current_day
-        
+            
     except Exception as e:
-        if manual: 
-            send_tech_info(f"🔴 Помилка при перевірці: {e}")
+        if manual: send_tech_info(f"🔴 Помилка запиту: {e}")
 
 def monitoring_loop():
     global last_power_state
