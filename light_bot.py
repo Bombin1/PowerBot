@@ -117,29 +117,36 @@ def check_updates_for_admin(manual=False):
     global last_update_check_day, last_notified_version
     current_day = datetime.now().date()
     
-    # Якщо не ручна перевірка і сьогодні вже перевіряли — виходимо
+    # Якщо це автоматична перевірка і сьогодні вже перевіряли — виходимо
     if not manual and last_update_check_day == current_day: 
-        return False
+        return
 
     try:
         import random
-        # Додаємо nocache, щоб GitHub не віддав старий файл
+        # nocache через випадкове число, щоб GitHub видав найсвіжішу версію
         v_url = f"{VERSION_URL}?nocache={random.randint(1,100000)}"
         response = requests.get(v_url, timeout=15)
         
         if response.status_code != 200:
-            if manual: send_tech_info("❌ Не вдалося отримати файл версії з GitHub.")
-            return False
+            if manual: 
+                send_tech_info("❌ Не вдалося отримати файл версії з GitHub.")
+            return
             
+        # Очищуємо текст версії від зайвих пробілів
         github_version = "".join(filter(lambda x: x.isdigit() or x == '.', response.text.strip()))
         
         if version_tuple(github_version) > version_tuple(VERSION):
-            # Якщо знайшли нову версію
+            # Якщо ми вже сповіщали про цю версію автоматично, і це не ручна перевірка — мовчимо
+            if not manual and last_notified_version == github_version:
+                return
+
             changelog_text = "Опис змін доступний на GitHub."
             try:
                 ch_resp = requests.get(CHANGELOG_URL, timeout=10)
-                if ch_resp.status_code == 200: changelog_text = ch_resp.text.strip()
-            except: pass
+                if ch_resp.status_code == 200: 
+                    changelog_text = ch_resp.text.strip()
+            except: 
+                pass
 
             msg = (
                 f"🚀 **Доступне оновлення бота!**\n\n"
@@ -150,16 +157,16 @@ def check_updates_for_admin(manual=False):
             )
             send_tech_info(msg)
             last_notified_version = github_version
-            last_update_check_day = current_day
-            return True
         else:
             if manual:
                 send_tech_info(f"✅ **У вас актуальна версія:** `{VERSION}`")
-            last_update_check_day = current_day
-            return False
+        
+        # Запам'ятовуємо день перевірки
+        last_update_check_day = current_day
+        
     except Exception as e:
-        if manual: send_tech_info(f"🔴 Помилка при перевірці: {e}")
-        return False
+        if manual: 
+            send_tech_info(f"🔴 Помилка при перевірці: {e}")
 
 def monitoring_loop():
     global last_power_state
@@ -267,9 +274,8 @@ def callback_handler(call):
         check_updates_for_admin(manual=True)
 
     elif call.data == "upd_bot":
-        send_tech_info("🚀 **Оновлюю бота...**")
-        os.system("cp light_bot.py light_bot.py.bak")
-        os.system("git checkout origin/main -- light_bot.py")
+        send_tech_info("🚀 **Запит на оновлення...**\nБот вимикається, Menu.sh оновить код.")
+        with open(".update_bot", "w") as f: f.write("1")
         os._exit(0)
 
     elif call.data == "upd_launcher":
@@ -280,11 +286,13 @@ def callback_handler(call):
                               call.message.chat.id, call.message.message_id, reply_markup=get_update_keyboard(), parse_mode="Markdown")
 
     elif call.data == "rb_bot":
+        # Перевіряємо наявність бекапу перед тим як вимкнутись
         if os.path.exists("light_bot.py.bak"):
-            send_tech_info("↩️ **Відкат бота...**\nВідновлюю попередню версію з бекапу.")
-            os.system("cp light_bot.py.bak light_bot.py")
+            send_tech_info("↩️ **Запит на відкат...**\nБот вимикається, Menu.sh відновить бекап.")
+            with open(".rollback_bot", "w") as f: f.write("1")
             os._exit(0)
-        else: bot.answer_callback_query(call.id, "❌ Бекап не знайдено!", show_alert=True)
+        else:
+            bot.answer_callback_query(call.id, "❌ Бекап не знайдено!", show_alert=True)
 
     elif call.data.startswith("notify_"):
         settings['notifications'] = (call.data == "notify_on")
