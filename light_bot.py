@@ -122,27 +122,32 @@ def check_updates_for_admin(manual=False):
         return
 
     try:
-        import random
-        # nocache через випадкове число, щоб GitHub видав найсвіжішу версію
-        v_url = f"{VERSION_URL}?nocache={random.randint(1,100000)}"
-        response = requests.get(v_url, timeout=15)
+        # Використовуємо мітку часу time.time() та Headers для повного очищення кешу GitHub
+        timestamp = int(time.time())
+        v_url = f"{VERSION_URL}?t={timestamp}"
+        headers = {'Cache-Control': 'no-cache', 'Pragma': 'no-cache'}
+        
+        response = requests.get(v_url, headers=headers, timeout=15)
         
         if response.status_code != 200:
             if manual: 
                 send_tech_info("❌ Не вдалося отримати файл версії з GitHub.")
             return
             
-        # Очищуємо текст версії від зайвих пробілів
+        # Жорстка очистка тексту версії
         github_version = "".join(filter(lambda x: x.isdigit() or x == '.', response.text.strip()))
         
+        # Для ручної перевірки виводимо лог, щоб адмін бачив процес
+        if manual:
+            send_tech_info(f"🔍 **Результат перевірки:**\nНа GitHub: `{github_version}`\nУ вас: `{VERSION}`")
+
         if version_tuple(github_version) > version_tuple(VERSION):
-            # Якщо ми вже сповіщали про цю версію автоматично, і це не ручна перевірка — мовчимо
             if not manual and last_notified_version == github_version:
                 return
 
             changelog_text = "Опис змін доступний на GitHub."
             try:
-                ch_resp = requests.get(CHANGELOG_URL, timeout=10)
+                ch_resp = requests.get(f"{CHANGELOG_URL}?t={timestamp}", headers=headers, timeout=10)
                 if ch_resp.status_code == 200: 
                     changelog_text = ch_resp.text.strip()
             except: 
@@ -150,19 +155,18 @@ def check_updates_for_admin(manual=False):
 
             msg = (
                 f"🚀 **Доступне оновлення бота!**\n\n"
-                f"Поточна версія: `{VERSION}`\n"
                 f"Нова версія: `{github_version}`\n\n"
                 f"📝 **Що нового:**\n{changelog_text}\n\n"
                 f"Використайте `/set` -> Оновлення для встановлення."
             )
             send_tech_info(msg)
             last_notified_version = github_version
-        else:
-            if manual:
-                send_tech_info(f"✅ **У вас актуальна версія:** `{VERSION}`")
+        elif manual:
+            send_tech_info(f"✅ **У вас актуальна версія:** `{VERSION}`")
         
-        # Запам'ятовуємо день перевірки
-        last_update_check_day = current_day
+        # Запам'ятовуємо день автоматичної перевірки
+        if not manual:
+            last_update_check_day = current_day
         
     except Exception as e:
         if manual: 
@@ -274,15 +278,17 @@ def callback_handler(call):
         check_updates_for_admin(manual=True)
 
     elif call.data == "upd_bot":
-        send_tech_info("🚀 **Запит на оновлення отримано!**\nБот вимикається, Menu.sh зробить бекап та оновить код.")
+        send_tech_info("🚀 **Запит на оновлення отримано!**\nБот вимикається, зачекайте 5-10 сек...")
         # Створюємо маркер для лаунчера
         with open(".update_bot", "w") as f: f.write("1")
+        time.sleep(1) # Даємо час на запис файлу
         os._exit(0)
 
     elif call.data == "upd_launcher":
-        send_tech_info("🛫 **Оновлюю лаунчер...**\nБот вимикається для оновлення Menu.sh")
+        send_tech_info("🛫 **Оновлюю лаунчер...**\nБот вимикається, скрипт menu.sh буде перезаписано.")
         # Створюємо маркер для лаунчера
         with open(".update_launcher", "w") as f: f.write("1")
+        time.sleep(1)
         os._exit(0)
 
     elif call.data == "rb_bot":
