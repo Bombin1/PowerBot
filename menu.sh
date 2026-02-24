@@ -64,15 +64,32 @@ while true; do
     read -p "Оберіть пункт [1-6]: " choice
     case $choice in
         1)
-            echo "🚀 Запуск бота... (Ctrl+C для виходу в меню)"
+            echo "🚀 Запуск бота..."
             while true; do
                 python "$BOT_FILE"
-                EXIT_CODE=$?
-                if [ $EXIT_CODE -eq 0 ]; then
-                    echo "♻️ Перезапуск за запитом бота..."
-                    sleep 2
+                
+                # Перевірка на оновлення бота
+                if [ -f ".update_bot" ]; then
+                    cp "$BOT_FILE" "$BACKUP_FILE"
+                    git fetch --all && git reset --hard origin/main
+                    rm ".update_bot"
+                    echo "✅ Бот оновлений."
+                
+                # Перевірка на відкат
+                elif [ -f ".rollback_bot" ]; then
+                    cp "$BACKUP_FILE" "$BOT_FILE"
+                    rm ".rollback_bot"
+                    echo "✅ Відкат виконано."
+
+                # Перевірка на оновлення лаунчера
+                elif [ -f ".update_launcher" ]; then
+                    git checkout origin/main -- menu.sh
+                    chmod +x menu.sh
+                    rm ".update_launcher"
+                    echo "✅ Лаунчер оновлено. Перезапустіть його."
                 else
-                    echo "⚠️ Бот впав (код $EXIT_CODE). Перезапуск через 5 сек..."
+                    # Якщо маркерів немає, значить бот просто впав
+                    echo "⚠️ Бот вимкнувся. Перезапуск через 5 сек..."
                     sleep 5
                 fi
             done
