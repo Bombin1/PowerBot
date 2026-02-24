@@ -113,20 +113,28 @@ def format_schedule(data, queue_name):
 def version_tuple(v):
     return tuple(map(int, v.strip().split(".")))
 
-def check_updates_for_admin():
+def check_updates_for_admin(manual=False):
     global last_update_check_day, last_notified_version
     current_day = datetime.now().date()
-    if last_update_check_day == current_day: return
+    
+    # Якщо не ручна перевірка і сьогодні вже перевіряли — виходимо
+    if not manual and last_update_check_day == current_day: 
+        return False
 
     try:
         import random
-        v_url = f"{VERSION_URL}?nocache={random.randint(1,1000)}"
+        # Додаємо nocache, щоб GitHub не віддав старий файл
+        v_url = f"{VERSION_URL}?nocache={random.randint(1,100000)}"
         response = requests.get(v_url, timeout=15)
-        if response.status_code != 200: return
+        
+        if response.status_code != 200:
+            if manual: send_tech_info("❌ Не вдалося отримати файл версії з GitHub.")
+            return False
+            
         github_version = "".join(filter(lambda x: x.isdigit() or x == '.', response.text.strip()))
         
         if version_tuple(github_version) > version_tuple(VERSION):
-            if last_notified_version == github_version: return
+            # Якщо знайшли нову версію
             changelog_text = "Опис змін доступний на GitHub."
             try:
                 ch_resp = requests.get(CHANGELOG_URL, timeout=10)
@@ -138,13 +146,20 @@ def check_updates_for_admin():
                 f"Поточна версія: `{VERSION}`\n"
                 f"Нова версія: `{github_version}`\n\n"
                 f"📝 **Що нового:**\n{changelog_text}\n\n"
-                f"Використайте `/set` у приваті для оновлення."
+                f"Використайте `/set` -> Оновлення для встановлення."
             )
-            send_tech_info(msg) 
+            send_tech_info(msg)
             last_notified_version = github_version
             last_update_check_day = current_day
+            return True
+        else:
+            if manual:
+                send_tech_info(f"✅ **У вас актуальна версія:** `{VERSION}`")
+            last_update_check_day = current_day
+            return False
     except Exception as e:
-        print(f"[UPDATE ERROR] {e}")
+        if manual: send_tech_info(f"🔴 Помилка при перевірці: {e}")
+        return False
 
 def monitoring_loop():
     global last_power_state
@@ -189,6 +204,7 @@ def monitoring_loop():
 # --- [ АДМІН-МЕНЮ ] ---
 def get_update_keyboard():
     markup = types.InlineKeyboardMarkup(row_width=2)
+    markup.add(types.InlineKeyboardButton("🔍 Перевірити наявність оновлень", callback_data="manual_check_now"))
     markup.add(types.InlineKeyboardButton("🤖 Бот", callback_data="upd_bot"),
                types.InlineKeyboardButton("🛫 Лаунчер", callback_data="upd_launcher"))
     markup.add(types.InlineKeyboardButton("⬅️ Назад", callback_data="back_to_main_set"))
@@ -200,6 +216,15 @@ def get_rollback_keyboard():
                types.InlineKeyboardButton("🛫 Лаунчер", callback_data="rb_launcher"))
     markup.add(types.InlineKeyboardButton("⬅️ Назад", callback_data="back_to_main_set"))
     return markup
+
+@bot.message_handler(commands=['check'])
+def manual_check_handler(message):
+    # Тільки для адміна в приваті
+    if message.chat.type != 'private' or message.from_user.id not in ADMIN_IDS:
+        return
+    
+    bot.reply_to(message, "🔍 **З'єднуюсь з GitHub...**", parse_mode="Markdown")
+    check_updates_for_admin(manual=True)
 
 @bot.message_handler(func=lambda message: message.text in ["/set", "⚙️"])   
 def admin_settings(message):
@@ -236,6 +261,10 @@ def callback_handler(call):
         markup.add(types.InlineKeyboardButton("🔄 Оновлення", callback_data="exec_update"),
                    types.InlineKeyboardButton("↩️ Відкат", callback_data="exec_rollback"))
         bot.edit_message_text("🛠️ **Адмін-панель:**", call.message.chat.id, call.message.message_id, reply_markup=markup, parse_mode="Markdown")
+
+    elif call.data == "manual_check_now":
+        bot.answer_callback_query(call.id, "🔍 Перевіряю...")
+        check_updates_for_admin(manual=True)
 
     elif call.data == "upd_bot":
         send_tech_info("🚀 **Оновлюю бота...**")
