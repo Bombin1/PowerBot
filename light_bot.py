@@ -203,8 +203,10 @@ def get_rollback_keyboard():
 
 @bot.message_handler(func=lambda message: message.text in ["/set", "⚙️"])   
 def admin_settings(message):
+    # ПЕРЕВІРКА: Ігноруємо, якщо це не приватний чат або не адмін
     if message.chat.type != 'private' or message.from_user.id not in ADMIN_IDS:
         return
+    
     markup = types.InlineKeyboardMarkup(row_width=2)
     markup.add(types.InlineKeyboardButton("📊 Графік", callback_data="set_graph"))
     markup.add(types.InlineKeyboardButton("🔄 Оновлення", callback_data="exec_update"),
