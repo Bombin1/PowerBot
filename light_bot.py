@@ -23,11 +23,11 @@ MONO_URL = "https://send.monobank.ua/jar/8WFAPWLdPu"
 
 SETTINGS_FILE = 'user_settings.json'
 LOCAL_SCHEDULE_FILE = 'current_schedule.json'
-VERSION = "2.7"  # Поточна версія бота
+VERSION = "2.8"  # Поточна версія бота
 VERSION_URL = "https://raw.githubusercontent.com/Bombin1/PowerBot/main/version.txt"
 CHANGELOG_URL = "https://raw.githubusercontent.com/Bombin1/PowerBot/main/changelog.txt"
-last_update_check_day = None  # Щоб знати, чи перевіряли ми сьогодні
-last_notified_version = None  # Пам'ятаємо, про яку версію вже звітували
+last_update_check_day = None 
+last_notified_version = None 
 
 # --- [ СПИСОК МІСТ ТА ПОСИЛАНЬ ] ---
 CITY_SOURCES = {
@@ -49,8 +49,16 @@ CITY_SOURCES = {
     "Житомир": "https://raw.githubusercontent.com/yaroslav2901/OE_OUTAGE_DATA/main/data/Zhytomyroblenergo.json"
 }
 
-# --- [ РОБОТА З НАЛАШТУВАННЯМИ ] ---
+# --- [ ЦЕНТРАЛІЗОВАНІ ТЕХНІЧНІ ПОВІДОМЛЕННЯ ] ---
+def send_tech_info(text):
+    """Надсилає технічну інформацію ТІЛЬКИ адмінам у приват"""
+    for admin_id in ADMIN_IDS:
+        try:
+            bot.send_message(admin_id, text, parse_mode="Markdown")
+        except Exception:
+            print(f"[LOG] Не вдалося надіслати в приват {admin_id}. Чат не розпочато.")
 
+# --- [ РОБОТА З НАЛАШТУВАННЯМИ ] ---
 def load_settings():
     if os.path.exists(SETTINGS_FILE):
         with open(SETTINGS_FILE, 'r', encoding='utf-8') as f:
@@ -62,26 +70,20 @@ def save_settings(settings):
         json.dump(settings, f, ensure_ascii=False, indent=4)
 
 # --- [ ПАРСИНГ ГРАФІКА ] ---
-
 def format_schedule(data, queue_name):
-    """Зчитує дані ТІЛЬКИ для поточного дня через ключ today"""
     queue_data = None
-    
     if 'fact' in data and 'data' in data['fact']:
         today_id = str(data['fact'].get('today', ''))
         fact_data = data['fact']['data']
         if today_id in fact_data:
             queue_data = fact_data[today_id].get(queue_name)
-    
     if not queue_data:
         queue_data = data.get(queue_name)
-
     if not queue_data:
         return None
 
     time_zones = data.get("time_zone") or (data.get("preset") or {}).get("time_zone", {})
     time_types = data.get("time_type") or (data.get("preset") or {}).get("time_type", {})
-
     schedule_blocks = []
     current_status = None
     start_time = None
@@ -89,11 +91,7 @@ def format_schedule(data, queue_name):
     for i in range(1, 25):
         key = str(i)
         status = queue_data.get(key)
-        if time_zones and key in time_zones:
-            t_start, t_end = time_zones[key][1], time_zones[key][2]
-        else:
-            t_start, t_end = f"{i-1:02d}:00", f"{i:02d}:00"
-
+        t_start, t_end = (time_zones[key][1], time_zones[key][2]) if time_zones and key in time_zones else (f"{i-1:02d}:00", f"{i:02d}:00")
         if status != current_status:
             if current_status is not None:
                 schedule_blocks.append((current_status, start_time, t_start))
@@ -103,75 +101,48 @@ def format_schedule(data, queue_name):
 
     text = ""
     for status, s, e in schedule_blocks:
-        if status == "no":
-            icon, desc = "🔴", "Відключення"
-        elif status == "yes":
-            icon, desc = "🟢", "Світло Є"
+        if status == "no": icon, desc = "🔴", "Відключення"
+        elif status == "yes": icon, desc = "🟢", "Світло Є"
         else:
             icon = "🟡"
             desc = time_types.get(status, "Можливе відключення")
         text += f"{icon} **{s} - {e}** — {desc}\n"
-    
     return text
 
 # --- [ ФОНОВІ ПРОЦЕСИ ] ---
-
 def version_tuple(v):
     return tuple(map(int, v.strip().split(".")))
 
 def check_updates_for_admin():
     global last_update_check_day, last_notified_version
     current_day = datetime.now().date()
-
-    # Якщо вже сьогодні успішно повідомили про ЦЮ версію — виходимо
-    if last_update_check_day == current_day:
-        return
+    if last_update_check_day == current_day: return
 
     try:
         import random
-        # Анти-кеш
         v_url = f"{VERSION_URL}?nocache={random.randint(1,1000)}"
         response = requests.get(v_url, timeout=15)
-        
-        if response.status_code != 200:
-            return
-
-        # Очищаємо версію
+        if response.status_code != 200: return
         github_version = "".join(filter(lambda x: x.isdigit() or x == '.', response.text.strip()))
-
-        # Порівнюємо
+        
         if version_tuple(github_version) > version_tuple(VERSION):
-            # Якщо ми про ЦЮ версію вже писали в групу — не спамимо
-            if last_notified_version == github_version:
-                return
-
+            if last_notified_version == github_version: return
             changelog_text = "Опис змін доступний на GitHub."
             try:
                 ch_resp = requests.get(CHANGELOG_URL, timeout=10)
-                if ch_resp.status_code == 200:
-                    changelog_text = ch_resp.text.strip()
-            except Exception as e:
-                print(f"Помилка ченджлога: {e}")
+                if ch_resp.status_code == 200: changelog_text = ch_resp.text.strip()
+            except: pass
 
             msg = (
                 f"🚀 **Доступне оновлення бота!**\n\n"
                 f"Поточна версія: `{VERSION}`\n"
                 f"Нова версія: `{github_version}`\n\n"
                 f"📝 **Що нового:**\n{changelog_text}\n\n"
-                f"Оновити може адмін через: `/set` -> 🔄 Оновлення"
+                f"Використайте `/set` у приваті для оновлення."
             )
-
-            # ВІДПРАВЛЯЄМО В ГРУПУ (CHAT_ID)
-            try:
-                bot.send_message(CHAT_ID, msg, parse_mode="Markdown")
-                
-                # Тільки після успішної відправки в групу ставимо мітки
-                last_notified_version = github_version
-                last_update_check_day = current_day
-                print(f"[UPDATE] Повідомлення про версію {github_version} надіслано в групу.")
-            except Exception as e:
-                print(f"[UPDATE ERROR] Не вдалося надіслати в CHAT_ID: {e}")
-
+            send_tech_info(msg) 
+            last_notified_version = github_version
+            last_update_check_day = current_day
     except Exception as e:
         print(f"[UPDATE ERROR] {e}")
 
@@ -179,24 +150,20 @@ def monitoring_loop():
     global last_power_state
     last_check_hour = -1
     last_schedule_text = "" 
-    
     info = get_battery_info()
     if info: last_power_state = info["plugged"]
     
     while True:
         try:
             check_updates_for_admin()
-            # 1. СВІТЛО (кожні 30 сек)
             info = get_battery_info()
             if info and last_power_state is not None and info["plugged"] != last_power_state:
                 text = "💡 **Світло з'явилось!**" if info["plugged"] else "🕯️ **Світло зникло!**"
                 bot.send_message(CHAT_ID, text, parse_mode="Markdown")
                 last_power_state = info["plugged"]
             
-            # 2. ГРАФІК (раз на годину)
             now = datetime.now()
             settings = load_settings()
-            
             if settings.get("notifications") and settings.get("city"):
                 if now.hour != last_check_hour:
                     try:
@@ -204,69 +171,51 @@ def monitoring_loop():
                         if r.status_code == 200:
                             data = r.json()
                             current_schedule = format_schedule(data, settings['queue'])
-                            
-                            # Публікуємо ТІЛЬКИ якщо текст змінився
                             if current_schedule and current_schedule != last_schedule_text:
                                 q_num = settings['queue'].replace('GPV', '')
-            
-                                # Визначаємо заголовок (нічне вікно 00:00 - 04:00 для нових графіків)
-                                if not last_schedule_text or (0 <= now.hour < 4):
-                                    header_type = "📅 **Графік на сьогодні**"
-                                else:
-                                    header_type = "⚠️ **Графік оновлено**"
-            
-                                header = f"{header_type} ({q_num}):"
-            
-                                bot.send_message(CHAT_ID, f"{header}\n\n{current_schedule}", parse_mode="Markdown")
-                                
+                                header_type = "📅 **Графік на сьогодні**" if not last_schedule_text or (0 <= now.hour < 4) else "⚠️ **Графік оновлено**"
+                                bot.send_message(CHAT_ID, f"{header_type} ({q_num}):\n\n{current_schedule}", parse_mode="Markdown")
                                 last_schedule_text = current_schedule
                                 with open(LOCAL_SCHEDULE_FILE, 'w', encoding='utf-8') as f:
                                     json.dump(data, f, ensure_ascii=False)
-                            
                             last_check_hour = now.hour
-                    except Exception as sched_e:
-                        print(f"Помилка графіка: {sched_e}")
-
+                    except Exception as e:
+                        send_tech_info(f"🔴 **Помилка графіка:** {e}")
             time.sleep(30)
         except Exception as e:
             print(f"Помилка моніторингу: {e}")
             time.sleep(10)
 
-# --- [ АДМІН-МЕНЮ /SET ] ---
-
+# --- [ АДМІН-МЕНЮ ] ---
 def get_update_keyboard():
     markup = types.InlineKeyboardMarkup(row_width=2)
-    markup.add(
-        types.InlineKeyboardButton("🤖 Бот", callback_data="upd_bot"),
-        types.InlineKeyboardButton("🛫 Лаунчер", callback_data="upd_launcher")
-    )
+    markup.add(types.InlineKeyboardButton("🤖 Бот", callback_data="upd_bot"),
+               types.InlineKeyboardButton("🛫 Лаунчер", callback_data="upd_launcher"))
     markup.add(types.InlineKeyboardButton("⬅️ Назад", callback_data="back_to_main_set"))
     return markup
 
 def get_rollback_keyboard():
     markup = types.InlineKeyboardMarkup(row_width=2)
-    markup.add(
-        types.InlineKeyboardButton("🤖 Бот", callback_data="rb_bot"),
-        types.InlineKeyboardButton("🛫 Лаунчер", callback_data="rb_launcher")
-    )
+    markup.add(types.InlineKeyboardButton("🤖 Бот", callback_data="rb_bot"),
+               types.InlineKeyboardButton("🛫 Лаунчер", callback_data="rb_launcher"))
     markup.add(types.InlineKeyboardButton("⬅️ Назад", callback_data="back_to_main_set"))
     return markup
-@bot.message_handler(func=lambda message: message.text in ["/set", "⚙️"])    
+
+@bot.message_handler(func=lambda message: message.text in ["/set", "⚙️"])   
 def admin_settings(message):
-    if message.from_user.id not in ADMIN_IDS: return
-    
+    if message.chat.type != 'private' or message.from_user.id not in ADMIN_IDS:
+        return
     markup = types.InlineKeyboardMarkup(row_width=2)
     markup.add(types.InlineKeyboardButton("📊 Графік", callback_data="set_graph"))
     markup.add(types.InlineKeyboardButton("🔄 Оновлення", callback_data="exec_update"),
                types.InlineKeyboardButton("↩️ Відкат", callback_data="exec_rollback"))
-    
     bot.send_message(message.chat.id, "🛠️ **Адмін-панель:**", reply_markup=markup, parse_mode="Markdown")
 
 @bot.callback_query_handler(func=lambda call: True)
 def callback_handler(call):
+    if call.message.chat.type != 'private': return
     settings = load_settings()
 
-    # --- ГОЛОВНЕ МЕНЮ /SET ---
     if call.data == "set_graph":
         markup = types.InlineKeyboardMarkup()
         markup.add(types.InlineKeyboardButton("✅ Увімкнути", callback_data="notify_on"),
@@ -274,12 +223,10 @@ def callback_handler(call):
         bot.edit_message_text("Дзвоник сповіщень про графік:", call.message.chat.id, call.message.message_id, reply_markup=markup)
 
     elif call.data == "exec_update":
-        if call.from_user.id in ADMIN_IDS:
-            bot.edit_message_text("🔄 **Що саме оновити?**", call.message.chat.id, call.message.message_id, reply_markup=get_update_keyboard(), parse_mode="Markdown")
+        bot.edit_message_text("🔄 **Що саме оновити?**", call.message.chat.id, call.message.message_id, reply_markup=get_update_keyboard(), parse_mode="Markdown")
 
     elif call.data == "exec_rollback":
-        if call.from_user.id in ADMIN_IDS:
-            bot.edit_message_text("↩️ **Що саме відкотити?**", call.message.chat.id, call.message.message_id, reply_markup=get_rollback_keyboard(), parse_mode="Markdown")
+        bot.edit_message_text("↩️ **Що саме відкотити?**", call.message.chat.id, call.message.message_id, reply_markup=get_rollback_keyboard(), parse_mode="Markdown")
 
     elif call.data == "back_to_main_set":
         markup = types.InlineKeyboardMarkup(row_width=2)
@@ -288,9 +235,8 @@ def callback_handler(call):
                    types.InlineKeyboardButton("↩️ Відкат", callback_data="exec_rollback"))
         bot.edit_message_text("🛠️ **Адмін-панель:**", call.message.chat.id, call.message.message_id, reply_markup=markup, parse_mode="Markdown")
 
-    # --- ЛОГІКА ОНОВЛЕННЯ ---
     elif call.data == "upd_bot":
-        bot.edit_message_text("🚀 **Робимо бекап та оновлюємо бота...**\nЗачекайте 10 сек.", call.message.chat.id, call.message.message_id, parse_mode="Markdown")
+        send_tech_info("🚀 **Оновлюю бота...**")
         os.system("cp light_bot.py light_bot.py.bak")
         os.system("git checkout origin/main -- light_bot.py")
         os._exit(0)
@@ -302,22 +248,13 @@ def callback_handler(call):
         bot.edit_message_text("✅ **Лаунчер оновлено!**\nБекап створено, права (chmod +x) відновлено.", 
                               call.message.chat.id, call.message.message_id, reply_markup=get_update_keyboard(), parse_mode="Markdown")
 
-    # --- ЛОГІКА ВІДКАТУ ---
     elif call.data == "rb_bot":
         if os.path.exists("light_bot.py.bak"):
-            bot.edit_message_text("↩️ **Відновлюю бота з бекапу...**", call.message.chat.id, call.message.message_id, parse_mode="Markdown")
+            send_tech_info("↩️ **Відкат бота...**\nВідновлюю попередню версію з бекапу.")
             os.system("cp light_bot.py.bak light_bot.py")
             os._exit(0)
-        else: bot.answer_callback_query(call.id, "❌ Бекап бота не знайдено!", show_alert=True)
+        else: bot.answer_callback_query(call.id, "❌ Бекап не знайдено!", show_alert=True)
 
-    elif call.data == "rb_launcher":
-        if os.path.exists("Menu.sh.bak"):
-            os.system("cp Menu.sh.bak Menu.sh && chmod +x Menu.sh")
-            bot.edit_message_text("✅ **Лаунчер відновлено!**\nПрава доступу відновлено.", 
-                                  call.message.chat.id, call.message.message_id, reply_markup=get_rollback_keyboard(), parse_mode="Markdown")
-        else: bot.answer_callback_query(call.id, "❌ Бекап лаунчера не знайдено!", show_alert=True)
-
-    # --- НАЛАШТУВАННЯ МІСТ ТА ЧЕРГ (Твій робочий код) ---
     elif call.data.startswith("notify_"):
         settings['notifications'] = (call.data == "notify_on")
         save_settings(settings)
@@ -326,49 +263,33 @@ def callback_handler(call):
             btns = [types.InlineKeyboardButton(city, callback_data=f"city_{city}") for city in CITY_SOURCES.keys()]
             markup.add(*btns)
             bot.edit_message_text("🏙️ Оберіть місто:", call.message.chat.id, call.message.message_id, reply_markup=markup)
-        else:
+        else: 
             bot.edit_message_text("🔕 Сповіщення вимкнено.", call.message.chat.id, call.message.message_id)
 
     elif call.data.startswith("city_"):
         city = call.data.split("_")[1]
         settings['city'] = city
         save_settings(settings)
-        bot.answer_callback_query(call.id, f"📥 Завантаження для м. {city}...")
         try:
             r = requests.get(CITY_SOURCES[city], timeout=15)
-            r.encoding = 'utf-8'
             data = r.json()
             with open(LOCAL_SCHEDULE_FILE, 'w', encoding='utf-8') as f:
                 json.dump(data, f, ensure_ascii=False, indent=4)
-            queues = [k for k in data.keys() if 'GPV' in k]
-            if not queues and 'fact' in data:
-                fact_data = data['fact'].get('data', {})
-                if fact_data:
-                    first_ts = list(fact_data.keys())[0]
-                    queues = [k for k in fact_data[first_ts].keys() if 'GPV' in k]
-            queues.sort()
+            queues = sorted([k for k in data.keys() if 'GPV' in k] or [k for k in data.get('fact', {}).get('data', {}).get(list(data.get('fact', {}).get('data', {}).keys() or [''])[0], {}).keys() if 'GPV' in k])
             markup = types.InlineKeyboardMarkup(row_width=3)
             btns = [types.InlineKeyboardButton(text=q.replace('GPV', ''), callback_data=f"queue_{q}") for q in queues]
             markup.add(*btns)
-            bot.edit_message_text(f"🔢 Оберіть чергу для м. {city}:", call.message.chat.id, call.message.message_id, reply_markup=markup)
-        except Exception as e: bot.send_message(call.message.chat.id, f"❌ Помилка: {e}")
+            bot.edit_message_text(f"🔢 Черга для м. {city}:", call.message.chat.id, call.message.message_id, reply_markup=markup)
+        except Exception as e: 
+            send_tech_info(f"🔴 **Помилка завантаження міст:** {e}")
 
     elif call.data.startswith("queue_"):
-        queue_key = call.data.split("_")[1]
-        settings['queue'] = queue_key
+        settings['queue'] = call.data.split("_")[1]
         save_settings(settings)
-        bot.answer_callback_query(call.id, "✅ Збережено!")
-        bot.edit_message_text(f"✅ **Налаштування завершено!**\n📍 Місто: {settings['city']}\n🔢 Черга: {queue_key.replace('GPV', '')}", 
+        bot.edit_message_text(f"✅ **Збережено!**\n📍 {settings['city']}, Черга: {settings['queue'].replace('GPV', '')}", 
                               call.message.chat.id, call.message.message_id, parse_mode="Markdown")
 
-# --- [ ІСНУЮЧІ ФУНКЦІЇ БАТАРЕЇ ТА ДОПОМОГИ ] ---
-
-def send_error_to_admin(error_text):
-    try:
-        if ADMIN_IDS:
-            bot.send_message(ADMIN_IDS[0], f"⚠️ **Критична помилка:**\n`{error_text}`", parse_mode="Markdown")
-    except: pass
-
+# --- [ СТАТУС ТА ДОПОМОГА ] ---
 def get_battery_info():
     try:
         result = subprocess.check_output(["termux-battery-status"], text=True)
@@ -384,11 +305,10 @@ def get_battery_info():
 
 @bot.message_handler(func=lambda message: message.text in ["/help", "❓"])
 def help_command(message):
-    user_id = message.from_user.id
+    is_admin_private = (message.from_user.id in ADMIN_IDS and message.chat.type == 'private')
     help_text = f"📜 **Команди (v{VERSION}):**\n• 💡 або 🛎️ — Статус світла.\n• ❓ `/help` — Допомога."
-    if user_id in ADMIN_IDS:
-        help_text += "\n\n🛠️ **Адмін-панель:**\n• ⚙️ `/set` — Налаштування графіка та бота."
-    
+    if is_admin_private:
+        help_text += "\n\n🛠️ **Адмін-панель:**\n• ⚙️ `/set` — Налаштування бота."
     help_text += f"\n\n🔗 [GitHub]({REPO_URL}) | ☕ [На каву]({MONO_URL})"
     bot.reply_to(message, help_text, parse_mode="Markdown", disable_web_page_preview=True)
 
@@ -398,40 +318,46 @@ def handle_message(message):
     if any(x in text for x in ["💡", "🛎️", "Є світло?"]) or text == "/status":
         info = get_battery_info()
         if info:
-            if info["plugged"]:
-                status_text = "💡 **Світло є**"
-            else:
-                status_text = "🕯️ **Світла немає**"
-            
-            percent = info['percent']
-            temp_adjusted = info['temp'] - 2
-            reply = f"{status_text}\n🔋: {percent}% | 🌡️: ~{temp_adjusted}°C"        
-            bot.reply_to(message, reply, parse_mode="Markdown")
+            status_text = "💡 **Світло є**" if info["plugged"] else "🕯️ **Світла немає**"
+            bot.reply_to(message, f"{status_text}\n🔋: {info['percent']}% | 🌡️: ~{info['temp']}°C", parse_mode="Markdown")
 
-# --- [ СИСТЕМНІ ФУНКЦІЇ ] ---
+# --- [ ПЕРШИЙ ЗАПУСК ] ---
+def first_run_check():
+    marker_file = '.installed'
+    if not os.path.exists(marker_file):
+        try:
+            admin_mention = f"[@admin](tg://user?id={ADMIN_IDS[0]})" if ADMIN_IDS else "Адміністратор"
+            msg_admin = (
+                f"🛠 **Система активована!**\n\n"
+                f"👤 {admin_mention}, будь ласка, напишіть боту в приватні повідомлення "
+                f"та натисніть **/start**, щоб мати можливість отримувати технічні сповіщення "
+                f"та керувати налаштуваннями."
+            )
+            bot.send_message(CHAT_ID, msg_admin, parse_mode="Markdown")
 
-def update_bot(message):
-    """Просто вимикає бота, а menu.sh підхопить і оновить код силоміць"""
-    if message.from_user.id not in ADMIN_IDS: return
-    try:
-        bot.reply_to(message, "🚀 Виконую оновлення... Зачекайте 10-15 секунд.")
-        # Завершуємо процес. Bash-скрипт побачить це і зробить reset --hard
-        os._exit(0) 
-    except Exception as e:
-        bot.reply_to(message, f"❌ Помилка: {e}")
+            help_text = (
+                f"📜 **Вітаємо! Бот для моніторингу світла готовий.**\n\n"
+                f"Ви можете використовувати наступні емодзі для перевірки стану:\n"
+                f"• 💡 або 🛎️ — Дізнатися, чи є світло зараз\n"
+                f"• ❓ `/help` — Виклик цієї довідки\n\n"
+                f"📢 Всі сповіщення про зміну стану будуть приходити сюди автоматично."
+            )
+            bot.send_message(CHAT_ID, help_text, parse_mode="Markdown")
 
-def rollback_bot(message):
-    """Повертає бекап, якщо він є, і перезапускає бота"""
-    if message.from_user.id not in ADMIN_IDS: return
-    if os.path.exists("light_bot_backup.py"):
-        subprocess.run(["cp", "light_bot_backup.py", sys.argv[0]])
-        bot.reply_to(message, "🔙 Відкат виконано! Перезапуск...")
-        os._exit(0)
-    else:
-        bot.reply_to(message, "❌ Файл бекапу не знайдено.")
+            with open(marker_file, 'w') as f:
+                f.write(datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+        except Exception as e:
+            print(f"[ERROR] Не вдалося відправити привітальні повідомлення: {e}")
 
 if __name__ == "__main__":
     subprocess.run(["termux-wake-lock"])
+    
+    # Виклик перевірки першого запуску
+    first_run_check()
+    
+    # Повідомляємо адміна про запуск у приват
+    send_tech_info(f"✅ **Бот запущений!**\nВерсія: `{VERSION}`\nWake Lock: Active")
+    
     threading.Thread(target=monitoring_loop, daemon=True).start()
     while True:
         try: bot.infinity_polling()
