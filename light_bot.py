@@ -274,21 +274,22 @@ def callback_handler(call):
         check_updates_for_admin(manual=True)
 
     elif call.data == "upd_bot":
-        send_tech_info("🚀 **Запит на оновлення...**\nБот вимикається, Menu.sh оновить код.")
+        send_tech_info("🚀 **Запит на оновлення отримано!**\nБот вимикається, Menu.sh зробить бекап та оновить код.")
+        # Створюємо маркер для лаунчера
         with open(".update_bot", "w") as f: f.write("1")
         os._exit(0)
 
     elif call.data == "upd_launcher":
-        bot.edit_message_text("🛫 **Оновлюю лаунчер...**", call.message.chat.id, call.message.message_id, parse_mode="Markdown")
-        os.system("cp Menu.sh Menu.sh.bak")
-        os.system("git checkout origin/main -- Menu.sh && chmod +x Menu.sh")
-        bot.edit_message_text("✅ **Лаунчер оновлено!**\nБекап створено, права (chmod +x) відновлено.", 
-                              call.message.chat.id, call.message.message_id, reply_markup=get_update_keyboard(), parse_mode="Markdown")
+        send_tech_info("🛫 **Оновлюю лаунчер...**\nБот вимикається для оновлення Menu.sh")
+        # Створюємо маркер для лаунчера
+        with open(".update_launcher", "w") as f: f.write("1")
+        os._exit(0)
 
     elif call.data == "rb_bot":
-        # Перевіряємо наявність бекапу перед тим як вимкнутись
-        if os.path.exists("light_bot.py.bak"):
-            send_tech_info("↩️ **Запит на відкат...**\nБот вимикається, Menu.sh відновить бекап.")
+        # Перевіряємо шлях до бекапу, який робить ваш menu.sh
+        if os.path.exists("light_bot_backup.py"):
+            send_tech_info("↩️ **Відкат бота...**\nБот вимикається, лаунчер відновить версію з бекапу.")
+            # Створюємо маркер для лаунчера
             with open(".rollback_bot", "w") as f: f.write("1")
             os._exit(0)
         else:
