@@ -264,6 +264,10 @@ def admin_settings(message):
     # ПЕРЕВІРКА: Ігноруємо, якщо це не приватний чат або не адмін
     if message.chat.type != 'private' or message.from_user.id not in ADMIN_IDS:
         return
+    try:
+        bot.delete_message(message.chat.id, message.message_id)
+    except Exception as e:
+        print(f"[LOG] Не вдалося видалити команду: {e}")   
     
     markup = types.InlineKeyboardMarkup(row_width=2)
     markup.add(types.InlineKeyboardButton("📊 Графік", callback_data="set_graph"))
@@ -373,12 +377,16 @@ def get_battery_info():
 
 @bot.message_handler(func=lambda message: message.text in ["/help", "❓"])
 def help_command(message):
+    try:
+        bot.delete_message(message.chat.id, message.message_id)
+    except:
+        pass
     is_admin_private = (message.from_user.id in ADMIN_IDS and message.chat.type == 'private')
     help_text = f"📜 **Команди (v{VERSION}):**\n• 💡 або 🛎️ — Статус світла.\n• ❓ `/help` — Допомога."
     if is_admin_private:
         help_text += "\n\n🛠️ **Адмін-панель:**\n• ⚙️ `/set` — Налаштування бота."
     help_text += f"\n\n🔗 [GitHub]({REPO_URL}) | ☕ [На каву]({MONO_URL})"
-    bot.reply_to(message, help_text, parse_mode="Markdown", disable_web_page_preview=True)
+    bot.send_message(message.chat.id, help_text, parse_mode="Markdown", disable_web_page_preview=True, reply_markup=get_main_keyboard())
 
 @bot.message_handler(func=lambda message: True)    
 def handle_message(message):
