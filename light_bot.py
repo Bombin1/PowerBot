@@ -49,6 +49,30 @@ CITY_SOURCES = {
     "Житомир": "https://raw.githubusercontent.com/yaroslav2901/OE_OUTAGE_DATA/main/data/Zhytomyroblenergo.json"
 }
 
+def set_bot_commands():
+    # Команди для адмінів (бачать у приваті)
+    admin_commands = [
+        types.BotCommand("status", "Перевірити світло 💡"),
+        types.BotCommand("set", "Налаштування ⚙️"),
+        types.BotCommand("help", "Допомога ❓")
+    ]
+    # Для кожного адміна реєструємо індивідуальне меню
+    for admin_id in ADMIN_IDS:
+        try:
+            bot.set_my_commands(admin_commands, scope=types.BotCommandScopeChat(admin_id))
+        except:
+            pass
+    
+    # Команди для загальних чатів (тільки статус і допомога, або можна залишити порожнім)
+    group_commands = [
+        types.BotCommand("status", "Перевірити світло 💡")
+    ]
+    bot.set_my_commands(group_commands, scope=types.BotCommandScopeAllGroupChats())
+
+def get_main_keyboard():
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True, persistent=True)
+    markup.add(types.KeyboardButton("Перевірити наявність 💡"))
+    return markup
 # --- [ ЦЕНТРАЛІЗОВАНІ ТЕХНІЧНІ ПОВІДОМЛЕННЯ ] ---
 def send_tech_info(text):
     """Надсилає технічну інформацію ТІЛЬКИ адмінам у приват"""
@@ -359,11 +383,27 @@ def help_command(message):
 @bot.message_handler(func=lambda message: True)    
 def handle_message(message):
     text = message.text
-    if any(x in text for x in ["💡", "🛎️", "Є світло?"]) or text == "/status":
+    # Додаємо нашу нову кнопку "Перевірити наявність 💡" до списку тригерів
+    triggers = ["💡", "🛎️", "Є світло?", "/status", "Перевірити наявність 💡"]
+    
+    if any(x in text for x in triggers):
         info = get_battery_info()
         if info:
             status_text = "💡 **Світло є**" if info["plugged"] else "🕯️ **Світла немає**"
-            bot.reply_to(message, f"{status_text}\n🔋: {info['percent']}% | 🌡️: ~{info['temp']}°C", parse_mode="Markdown")
+            # Надсилаємо нове повідомлення замість reply_to, додаючи кнопку
+            bot.send_message(
+                message.chat.id, 
+                f"{status_text}\n🔋: {info['percent']}% | 🌡️: ~{info['temp']}°C", 
+                parse_mode="Markdown",
+                reply_markup=get_main_keyboard()
+            )
+            
+            # --- [ БЛОК ЧИСТКИ ] ---
+            try:
+                bot.delete_message(message.chat.id, message.message_id)
+            except Exception as e:
+                # Якщо немає прав на видалення, просто ігноруємо
+                print(f"[LOG] Не вдалося видалити: {e}")
 
 # --- [ ПЕРШИЙ ЗАПУСК ] ---
 def first_run_check():
@@ -396,12 +436,19 @@ def first_run_check():
 if __name__ == "__main__":
     subprocess.run(["termux-wake-lock"])
     
-    # Виклик перевірки першого запуску
+    # Налаштовуємо бічне меню
+    set_bot_commands()
+    
     first_run_check()
     
-    # Повідомляємо адміна про запуск у приват
+    # Додаємо кнопку до вітального повідомлення адміну
     send_tech_info(f"✅ **Бот запущений!**\nВерсія: `{VERSION}`\nWake Lock: Active")
     
+    # Щоб у адміна з'явилася кнопка внизу при першому запуску/рестарті
+    for admin_id in ADMIN_IDS:
+        try: bot.send_message(admin_id, "Клавіатура оновлена ⌨️", reply_markup=get_main_keyboard())
+        except: pass
+
     threading.Thread(target=monitoring_loop, daemon=True).start()
     while True:
         try: bot.infinity_polling()
