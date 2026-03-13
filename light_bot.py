@@ -23,7 +23,7 @@ MONO_URL = "https://send.monobank.ua/jar/8WFAPWLdPu"
 
 SETTINGS_FILE = 'user_settings.json'
 LOCAL_SCHEDULE_FILE = 'current_schedule.json'
-VERSION = "3.2"  # Поточна версія бота
+VERSION = "3.3"  # Поточна версія бота
 VERSION_URL = "https://raw.githubusercontent.com/Bombin1/PowerBot/main/version.txt"
 CHANGELOG_URL = "https://raw.githubusercontent.com/Bombin1/PowerBot/main/changelog.txt"
 last_update_check_day = None 
@@ -52,27 +52,29 @@ CITY_SOURCES = {
 def set_bot_commands():
     # Команди для адмінів (бачать у приваті)
     admin_commands = [
-        types.BotCommand("status", "Перевірити світло 💡"),
-        types.BotCommand("set", "Налаштування ⚙️"),
-        types.BotCommand("help", "Допомога ❓")
+        types.BotCommand("status", "💡 Перевірити наявність"),
+        types.BotCommand("set", "⚙️ Налаштування"),
+        types.BotCommand("help", "ℹ️ Інфо")
     ]
-    # Для кожного адміна реєструємо індивідуальне меню
+    # Команди для загальних чатів
+    group_commands = [
+        types.BotCommand("status", "💡 Перевірити наявність"),
+        types.BotCommand("help", "ℹ️ Інфо")
+    ]
+    
+    # Реєструємо меню для кожного адміна окремо
     for admin_id in ADMIN_IDS:
         try:
             bot.set_my_commands(admin_commands, scope=types.BotCommandScopeChat(admin_id))
         except:
             pass
     
-    # Команди для загальних чатів (тільки статус і допомога, або можна залишити порожнім)
-    group_commands = [
-        types.BotCommand("status", "Перевірити світло 💡")
-    ]
-    bot.set_my_commands(group_commands, scope=types.BotCommandScopeAllGroupChats())
+    # Реєструємо меню для всіх груп
+    try:
+        bot.set_my_commands(group_commands, scope=types.BotCommandScopeAllGroupChats())
+    except:
+        pass
 
-def get_main_keyboard():
-    markup = types.ReplyKeyboardMarkup(resize_keyboard=True, persistent=True)
-    markup.add(types.KeyboardButton("Перевірити наявність 💡"))
-    return markup
 # --- [ ЦЕНТРАЛІЗОВАНІ ТЕХНІЧНІ ПОВІДОМЛЕННЯ ] ---
 def send_tech_info(text):
     """Надсилає технічну інформацію ТІЛЬКИ адмінам у приват"""
@@ -80,7 +82,7 @@ def send_tech_info(text):
         try:
             bot.send_message(admin_id, text, parse_mode="Markdown")
         except Exception:
-            print(f"[LOG] Не вдалося надіслати в приват {admin_id}. Чат не розпочато.")
+            print(f"[LOG] Не вдалося надіслати в приват {admin_id}.")
 
 # --- [ РОБОТА З НАЛАШТУВАННЯМИ ] ---
 def load_settings():
@@ -136,11 +138,10 @@ def format_schedule(data, queue_name):
 # --- [ ФОНОВІ ПРОЦЕСИ ] ---
 def version_tuple(v):
     try:
-        # Видаляємо все, крім цифр і крапок, потім розбиваємо
         clean_v = "".join(filter(lambda x: x.isdigit() or x == '.', str(v).strip()))
         return tuple(map(int, clean_v.split(".")))
     except:
-        return (0, 0) # Якщо помилка, повертаємо нульову версію
+        return (0, 0)
 
 def check_updates_for_admin(manual=False):
     global last_update_check_day, last_notified_version
@@ -150,49 +151,32 @@ def check_updates_for_admin(manual=False):
         return
 
     try:
-        # ПОВНЕ ОЧИЩЕННЯ КЕШУ: унікальний t + заголовки
         timestamp = int(time.time())
         v_url = f"{VERSION_URL}?t={timestamp}"
-        headers = {
-            'Cache-Control': 'no-cache',
-            'Pragma': 'no-cache',
-            'User-Agent': f'PowerBot-Check-{timestamp}'
-        }
-        
+        headers = {'Cache-Control': 'no-cache', 'Pragma': 'no-cache'}
         response = requests.get(v_url, headers=headers, timeout=15)
         
         if response.status_code != 200:
-            if manual: send_tech_info("❌ GitHub не відповів (404/500).")
+            if manual: send_tech_info("❌ GitHub не відповів.")
             return
             
-        github_version_raw = response.text.strip()
-        # Очищаємо від зайвого сміття (пробіли, \r, \n)
-        github_version = "".join(filter(lambda x: x.isdigit() or x == '.', github_version_raw))
+        github_version = "".join(filter(lambda x: x.isdigit() or x == '.', response.text.strip()))
         
         if manual:
-            send_tech_info(f"🔍 **Результат перевірки:**\nНа GitHub: `{github_version}`\nУ вас: `{VERSION}`")
+            send_tech_info(f"🔍 **Результат перевірки:**\nGitHub: `{github_version}` | Ви: `{VERSION}`")
 
-        # Порівнюємо кортежі (наприклад, (3, 1) > (3, 0))
         if version_tuple(github_version) > version_tuple(VERSION):
             if not manual and last_notified_version == github_version:
                 return
-
-            msg = (
-                f"🚀 **Доступне оновлення!**\n\n"
-                f"Нова версія: `{github_version}`\n"
-                f"Ваша версія: `{VERSION}`\n\n"
-                f"Встановіть через `/set` -> Оновлення"
-            )
-            send_tech_info(msg)
+            send_tech_info(f"🚀 **Доступне оновлення!**\n\nНова версія: `{github_version}`\nВстановіть через `/set` -> Оновлення")
             last_notified_version = github_version
         elif manual:
             send_tech_info(f"✅ **Версія актуальна.**")
         
         if not manual:
             last_update_check_day = current_day
-            
     except Exception as e:
-        if manual: send_tech_info(f"🔴 Помилка запиту: {e}")
+        if manual: send_tech_info(f"🔴 Помилка оновлення: {e}")
 
 def monitoring_loop():
     global last_power_state
@@ -221,23 +205,19 @@ def monitoring_loop():
                             current_schedule = format_schedule(data, settings['queue'])
                             if current_schedule and current_schedule != last_schedule_text:
                                 q_num = settings['queue'].replace('GPV', '')
-                                header_type = "📅 **Графік на сьогодні**" if not last_schedule_text or (0 <= now.hour < 4) else "⚠️ **Графік оновлено**"
-                                bot.send_message(CHAT_ID, f"{header_type} ({q_num}):\n\n{current_schedule}", parse_mode="Markdown")
+                                header = "📅 **Графік на сьогодні**" if not last_schedule_text or (0 <= now.hour < 4) else "⚠️ **Графік оновлено**"
+                                bot.send_message(CHAT_ID, f"{header} ({q_num}):\n\n{current_schedule}", parse_mode="Markdown")
                                 last_schedule_text = current_schedule
-                                with open(LOCAL_SCHEDULE_FILE, 'w', encoding='utf-8') as f:
-                                    json.dump(data, f, ensure_ascii=False)
                             last_check_hour = now.hour
-                    except Exception as e:
-                        send_tech_info(f"🔴 **Помилка графіка:** {e}")
+                    except: pass
             time.sleep(30)
         except Exception as e:
-            print(f"Помилка моніторингу: {e}")
             time.sleep(10)
 
-# --- [ АДМІН-МЕНЮ ] ---
+# --- [ КЛАВІАТУРИ ДЛЯ АДМІНКИ ] ---
 def get_update_keyboard():
     markup = types.InlineKeyboardMarkup(row_width=2)
-    markup.add(types.InlineKeyboardButton("🔍 Перевірити наявність оновлень", callback_data="manual_check_now"))
+    markup.add(types.InlineKeyboardButton("🔍 Перевірити зараз", callback_data="manual_check_now"))
     markup.add(types.InlineKeyboardButton("🤖 Бот", callback_data="upd_bot"),
                types.InlineKeyboardButton("🛫 Лаунчер", callback_data="upd_launcher"))
     markup.add(types.InlineKeyboardButton("⬅️ Назад", callback_data="back_to_main_set"))
@@ -250,28 +230,41 @@ def get_rollback_keyboard():
     markup.add(types.InlineKeyboardButton("⬅️ Назад", callback_data="back_to_main_set"))
     return markup
 
-@bot.message_handler(commands=['check'])
-def manual_check_handler(message):
-    # Тільки для адміна в приваті
-    if message.chat.type != 'private' or message.from_user.id not in ADMIN_IDS:
-        return
-    
-    bot.reply_to(message, "🔍 **З'єднуюсь з GitHub...**", parse_mode="Markdown")
-    check_updates_for_admin(manual=True)
+# --- [ ОБРОБНИКИ КОМАНД ] ---
 
-# --- [ АДМІНІСТРУВАННЯ ТА НАЛАШТУВАННЯ ] ---
+@bot.message_handler(commands=['help'])
+def help_command(message):
+    try: bot.delete_message(message.chat.id, message.message_id)
+    except: pass
+    
+    is_admin = (message.from_user.id in ADMIN_IDS and message.chat.type == 'private')
+    help_text = f"📜 **Інфо (v{VERSION}):**\n\n• `/status` — Перевірити світло 💡\n• `/help` — Допомога ℹ️"
+    if is_admin:
+        help_text += "\n• `/set` — Налаштування ⚙️"
+    
+    help_text += f"\n\n🔗 [GitHub]({REPO_URL}) | ☕ [На каву]({MONO_URL})"
+    bot.send_message(message.chat.id, help_text, parse_mode="Markdown", disable_web_page_preview=True)
+
+@bot.message_handler(commands=['status'])
+def handle_status(message):
+    try: bot.delete_message(message.chat.id, message.message_id)
+    except: pass
+    
+    info = get_battery_info()
+    if info:
+        status_text = "💡 **Світло є**" if info["plugged"] else "🕯️ **Світла немає**"
+        bot.send_message(
+            message.chat.id, 
+            f"{status_text}\n🔋: {info['percent']}% | 🌡️: ~{info['temp']}°C", 
+            parse_mode="Markdown"
+        )
 
 @bot.message_handler(commands=['set'])
-@bot.message_handler(func=lambda message: message.text == "⚙️")
 def admin_settings(message):
-    # Дозволено тільки адміну в приваті
     if message.chat.type != 'private' or message.from_user.id not in ADMIN_IDS:
         return
-    
-    try:
-        bot.delete_message(message.chat.id, message.message_id)
-    except:
-        pass
+    try: bot.delete_message(message.chat.id, message.message_id)
+    except: pass
     
     markup = types.InlineKeyboardMarkup(row_width=2)
     markup.add(types.InlineKeyboardButton("📊 Графік", callback_data="set_graph"))
@@ -289,13 +282,10 @@ def callback_handler(call):
         markup = types.InlineKeyboardMarkup()
         markup.add(types.InlineKeyboardButton("✅ Увімкнути", callback_data="notify_on"),
                    types.InlineKeyboardButton("❌ Вимкнути", callback_data="notify_off"))
-        bot.edit_message_text("Дзвоник сповіщень про графік:", call.message.chat.id, call.message.message_id, reply_markup=markup)
+        bot.edit_message_text("Сповіщення про графік:", call.message.chat.id, call.message.message_id, reply_markup=markup)
 
     elif call.data == "exec_update":
-        bot.edit_message_text("🔄 **Що саме оновити?**", call.message.chat.id, call.message.message_id, reply_markup=get_update_keyboard(), parse_mode="Markdown")
-
-    elif call.data == "exec_rollback":
-        bot.edit_message_text("↩️ **Що саме відкотити?**", call.message.chat.id, call.message.message_id, reply_markup=get_rollback_keyboard(), parse_mode="Markdown")
+        bot.edit_message_text("🔄 **Що оновити?**", call.message.chat.id, call.message.message_id, reply_markup=get_update_keyboard(), parse_mode="Markdown")
 
     elif call.data == "back_to_main_set":
         markup = types.InlineKeyboardMarkup(row_width=2)
@@ -309,24 +299,21 @@ def callback_handler(call):
         check_updates_for_admin(manual=True)
 
     elif call.data == "upd_bot":
-        send_tech_info("🚀 **Запит на оновлення отримано!**\nБот вимикається, зачекайте 5-10 сек...")
+        send_tech_info("🚀 Оновлюю бота...")
         with open(".update_bot", "w") as f: f.write("1")
-        time.sleep(1)
         os._exit(0)
 
     elif call.data == "upd_launcher":
-        send_tech_info("🛫 **Оновлюю лаунчер...**\nБот вимикається, скрипт menu.sh буде перезаписано.")
+        send_tech_info("🛫 Оновлюю лаунчер...")
         with open(".update_launcher", "w") as f: f.write("1")
-        time.sleep(1)
         os._exit(0)
 
     elif call.data == "rb_bot":
         if os.path.exists("light_bot_backup.py"):
-            send_tech_info("↩️ **Відкат бота...**\nБот вимикається, лаунчер відновить версію з бекапу.")
+            send_tech_info("↩️ Відкат бота...")
             with open(".rollback_bot", "w") as f: f.write("1")
             os._exit(0)
-        else:
-            bot.answer_callback_query(call.id, "❌ Бекап не знайдено!", show_alert=True)
+        else: bot.answer_callback_query(call.id, "❌ Бекап не знайдено!", show_alert=True)
 
     elif call.data.startswith("notify_"):
         settings['notifications'] = (call.data == "notify_on")
@@ -336,8 +323,7 @@ def callback_handler(call):
             btns = [types.InlineKeyboardButton(city, callback_data=f"city_{city}") for city in CITY_SOURCES.keys()]
             markup.add(*btns)
             bot.edit_message_text("🏙️ Оберіть місто:", call.message.chat.id, call.message.message_id, reply_markup=markup)
-        else: 
-            bot.edit_message_text("🔕 Сповіщення вимкнено.", call.message.chat.id, call.message.message_id)
+        else: bot.edit_message_text("🔕 Вимкнено.", call.message.chat.id, call.message.message_id)
 
     elif call.data.startswith("city_"):
         city = call.data.split("_")[1]
@@ -346,18 +332,12 @@ def callback_handler(call):
         try:
             r = requests.get(CITY_SOURCES[city], timeout=15)
             data = r.json()
-            with open(LOCAL_SCHEDULE_FILE, 'w', encoding='utf-8') as f:
-                json.dump(data, f, ensure_ascii=False, indent=4)
-            
-            # Логіка пошуку черг
             queues = sorted([k for k in data.keys() if 'GPV' in k] or [k for k in data.get('fact', {}).get('data', {}).get(list(data.get('fact', {}).get('data', {}).keys() or [''])[0], {}).keys() if 'GPV' in k])
-            
             markup = types.InlineKeyboardMarkup(row_width=3)
             btns = [types.InlineKeyboardButton(text=q.replace('GPV', ''), callback_data=f"queue_{q}") for q in queues]
             markup.add(*btns)
             bot.edit_message_text(f"🔢 Черга для м. {city}:", call.message.chat.id, call.message.message_id, reply_markup=markup)
-        except Exception as e: 
-            send_tech_info(f"🔴 **Помилка завантаження міст:** {e}")
+        except: send_tech_info("🔴 Помилка завантаження черг.")
 
     elif call.data.startswith("queue_"):
         settings['queue'] = call.data.split("_")[1]
@@ -378,87 +358,25 @@ def get_battery_info():
         }
     except: return None
 
-# --- [ СТАТУС ТА ДОПОМОГА ] ---
-@bot.message_handler(commands=['help'])
-@bot.message_handler(func=lambda message: message.text == "❓")
-def help_command(message):
-    try:
-        bot.delete_message(message.chat.id, message.message_id)
-    except:
-        pass
-    
-    is_admin_private = (message.from_user.id in ADMIN_IDS and message.chat.type == 'private')
-    help_text = f"📜 **Команди (v{VERSION}):**\n• 💡 або 🛎️ — Статус світла.\n• ❓ `/help` — Допомога."
-    if is_admin_private:
-        help_text += "\n\n🛠️ **Адмін-панель:**\n• ⚙️ `/set` — Налаштування бота."
-    
-    help_text += f"\n\n🔗 [GitHub]({REPO_URL}) | ☕ [На каву]({MONO_URL})"
-    bot.send_message(message.chat.id, help_text, parse_mode="Markdown", 
-                     disable_web_page_preview=True, reply_markup=get_main_keyboard())
-
-@bot.message_handler(commands=['status', 'check'])
-@bot.message_handler(func=lambda message: True)  # Ловить текстові тригери та кнопку
-def handle_status_requests(message):
-    text = message.text or ""
-    triggers = ["💡", "🛎️", "Є світло?", "/status", "Перевірити наявність 💡"]
-    
-    if any(x.lower() in text.lower() for x in triggers):
-        info = get_battery_info()
-        if info:
-            status_text = "💡 **Світло є**" if info["plugged"] else "🕯️ **Світла немає**"
-            bot.send_message(
-                message.chat.id, 
-                f"{status_text}\n🔋: {info['percent']}% | 🌡️: ~{info['temp']}°C", 
-                parse_mode="Markdown",
-                reply_markup=get_main_keyboard()
-            )
-            
-            try:
-                bot.delete_message(message.chat.id, message.message_id)
-            except:
-                pass
-
 # --- [ ПЕРШИЙ ЗАПУСК ] ---
 def first_run_check():
     marker_file = '.installed'
     if not os.path.exists(marker_file):
         try:
             admin_mention = f"[@admin](tg://user?id={ADMIN_IDS[0]})" if ADMIN_IDS else "Адміністратор"
-            msg_admin = (
-                f"🛠 **Система активована!**\n\n"
-                f"👤 {admin_mention}, будь ласка, напишіть боту в приватні повідомлення "
-                f"та натисніть **/start**, щоб мати можливість керувати налаштуваннями."
-            )
-            bot.send_message(CHAT_ID, msg_admin, parse_mode="Markdown")
-
-            help_text = (
-                f"📜 **Вітаємо! Бот для моніторингу світла готовий.**\n\n"
-                f"Натискайте на кнопку нижче для перевірки стану:\n"
-                f"📢 Всі сповіщення будуть приходити сюди автоматично."
-            )
-            # Додаємо reply_markup сюди, щоб кнопка з'явилася в групі відразу
-            bot.send_message(CHAT_ID, help_text, parse_mode="Markdown", reply_markup=get_main_keyboard())
-
+            msg = (f"🛠 **Система активована!**\n\n👤 {admin_mention}, напишіть боту в приват "
+                   f"та натисніть **/start** (або оберіть меню), щоб керувати.")
+            bot.send_message(CHAT_ID, msg, parse_mode="Markdown")
+            
             with open(marker_file, 'w') as f:
                 f.write(datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
-        except Exception as e:
-            print(f"[ERROR] Не вдалося відправити привітання: {e}")
+        except: pass
 
 if __name__ == "__main__":
     subprocess.run(["termux-wake-lock"])
-    
-    # Налаштовуємо бічне меню
     set_bot_commands()
-    
     first_run_check()
-    
-    # Додаємо кнопку до вітального повідомлення адміну
-    send_tech_info(f"✅ **Бот запущений!**\nВерсія: `{VERSION}`\nWake Lock: Active")
-    
-    # Щоб у адміна з'явилася кнопка внизу при першому запуску/рестарті
-    for admin_id in ADMIN_IDS:
-        try: bot.send_message(admin_id, "Клавіатура оновлена ⌨️", reply_markup=get_main_keyboard())
-        except: pass
+    send_tech_info(f"✅ **Бот запущений!** (v{VERSION})")
 
     threading.Thread(target=monitoring_loop, daemon=True).start()
     while True:
