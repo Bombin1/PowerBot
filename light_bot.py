@@ -229,9 +229,15 @@ def get_rollback_keyboard():
                types.InlineKeyboardButton("🛫 Лаунчер", callback_data="rb_launcher"))
     markup.add(types.InlineKeyboardButton("⬅️ Назад", callback_data="back_to_main_set"))
     return markup
+    
+# --- [ КЛАВІАТУРА ] ---
+def get_main_keyboard():
+    # is_persistent=True — щоб кнопка завжди була під полем вводу
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True, is_persistent=True)
+    markup.add(types.KeyboardButton("💡 Перевірити наявність"))
+    return markup
 
 # --- [ ОБРОБНИКИ КОМАНД ] ---
-
 @bot.message_handler(commands=['help'])
 def help_command(message):
     try: bot.delete_message(message.chat.id, message.message_id)
@@ -246,6 +252,7 @@ def help_command(message):
     bot.send_message(message.chat.id, help_text, parse_mode="Markdown", disable_web_page_preview=True)
 
 @bot.message_handler(commands=['status'])
+@bot.message_handler(func=lambda message: message.text == "💡 Перевірити наявність")
 def handle_status(message):
     try: bot.delete_message(message.chat.id, message.message_id)
     except: pass
@@ -256,7 +263,8 @@ def handle_status(message):
         bot.send_message(
             message.chat.id, 
             f"{status_text}\n🔋: {info['percent']}% | 🌡️: ~{info['temp']}°C", 
-            parse_mode="Markdown"
+            parse_mode="Markdown",
+            reply_markup=get_main_keyboard()
         )
 
 @bot.message_handler(commands=['set'])
@@ -376,7 +384,14 @@ if __name__ == "__main__":
     subprocess.run(["termux-wake-lock"])
     set_bot_commands()
     first_run_check()
-    send_tech_info(f"✅ **Бот запущений!** (v{VERSION})")
+    
+    # Оновлюємо клавіатуру адміну в приваті при запуску
+    for admin_id in ADMIN_IDS:
+        try: 
+            bot.send_message(admin_id, f"✅ **Бот запущений!** (v{VERSION})", 
+                              parse_mode="Markdown", reply_markup=get_main_keyboard())
+        except: 
+            pass
 
     threading.Thread(target=monitoring_loop, daemon=True).start()
     while True:
