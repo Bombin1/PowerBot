@@ -26,7 +26,8 @@ LOCAL_SCHEDULE_FILE = 'current_schedule.json'
 VERSION = "3.4"  # Поточна версія бота
 VERSION_URL = "https://raw.githubusercontent.com/Bombin1/PowerBot/main/version.txt"
 CHANGELOG_URL = "https://raw.githubusercontent.com/Bombin1/PowerBot/main/changelog.txt"
-last_update_check_day = None 
+last_update_check_time = 0  # Зберігатимемо час останньої перевірки в секундах
+UPDATE_INTERVAL = 4 * 3600  # 4 години в секундах 
 last_notified_version = None 
 
 # --- [ СПИСОК МІСТ ТА ПОСИЛАНЬ ] ---
@@ -144,39 +145,45 @@ def version_tuple(v):
         return (0, 0)
 
 def check_updates_for_admin(manual=False):
-    global last_update_check_day, last_notified_version
-    current_day = datetime.now().date()
+    global last_update_check_time, last_notified_version
+    current_time = time.time()
     
-    if not manual and last_update_check_day == current_day: 
+    # Якщо не вручну і минуло менше ніж 4 години — виходимо
+    if not manual and (current_time - last_update_check_time) < UPDATE_INTERVAL: 
         return
 
     try:
-        timestamp = int(time.time())
-        v_url = f"{VERSION_URL}?t={timestamp}"
-        headers = {'Cache-Control': 'no-cache', 'Pragma': 'no-cache'}
-        response = requests.get(v_url, headers=headers, timeout=15)
+        api_url = "https://api.github.com/repos/Bombin1/PowerBot/releases/latest"
+        headers = {'Accept': 'application/vnd.github.v3+json', 'User-Agent': 'PowerBot-Updater'}
         
-        if response.status_code != 200:
-            if manual: send_tech_info("❌ GitHub не відповів.")
-            return
-            
-        github_version = "".join(filter(lambda x: x.isdigit() or x == '.', response.text.strip()))
+        response = requests.get(api_url, headers=headers, timeout=15)
         
-        if manual:
-            send_tech_info(f"🔍 **Результат перевірки:**\nGitHub: `{github_version}` | Ви: `{VERSION}`")
+        if response.status_code == 200:
+            data = response.json()
+            github_version = data.get("tag_name", "0.0").replace('v', '')
+            changelog = data.get("body", "Опис відсутній.")
 
-        if version_tuple(github_version) > version_tuple(VERSION):
-            if not manual and last_notified_version == github_version:
-                return
-            send_tech_info(f"🚀 **Доступне оновлення!**\n\nНова версія: `{github_version}`\nВстановіть через `/set` -> Оновлення")
-            last_notified_version = github_version
-        elif manual:
-            send_tech_info(f"✅ **Версія актуальна.**")
-        
-        if not manual:
-            last_update_check_day = current_day
+            if version_tuple(github_version) > version_tuple(VERSION):
+                # Якщо ми вже сповіщали про ЦЮ САМУ версію — не спамимо
+                if not manual and last_notified_version == github_version:
+                    return
+                
+                msg = (f"🚀 **Доступне оновлення!**\n\n"
+                       f"Версія: `{github_version}` (Ваша: `{VERSION}`)\n\n"
+                       f"📝 **Що нового:**\n{changelog}\n\n"
+                       f"Встановіть через `/set` -> Оновлення")
+                
+                send_tech_info(msg)
+                last_notified_version = github_version
+            elif manual:
+                send_tech_info(f"✅ **Версія актуальна:** `{VERSION}`")
+            
+            # Оновлюємо час останньої успішної перевірки
+            if not manual:
+                last_update_check_time = current_time
+                
     except Exception as e:
-        if manual: send_tech_info(f"🔴 Помилка оновлення: {e}")
+        if manual: send_tech_info(f"🔴 Помилка API: {e}")
 
 def monitoring_loop():
     global last_power_state
