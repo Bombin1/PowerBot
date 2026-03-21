@@ -290,8 +290,11 @@ def admin_settings(message):
     
     markup = types.InlineKeyboardMarkup(row_width=2)
     markup.add(types.InlineKeyboardButton("📊 Графік", callback_data="set_graph"))
+    # Рядок з оновленням та відкатом
     markup.add(types.InlineKeyboardButton("🔄 Оновлення", callback_data="exec_update"),
                types.InlineKeyboardButton("↩️ Відкат", callback_data="exec_rollback"))
+    # Нова кнопка на всю ширину (row_width=1 для цього рядка автоматично)
+    markup.add(types.InlineKeyboardButton("🔃 Перезапуск", callback_data="exec_restart"))
     
     bot.send_message(message.chat.id, "🛠️ **Адмін-панель:**", reply_markup=markup, parse_mode="Markdown")
 
@@ -314,6 +317,7 @@ def callback_handler(call):
         markup.add(types.InlineKeyboardButton("📊 Графік", callback_data="set_graph"))
         markup.add(types.InlineKeyboardButton("🔄 Оновлення", callback_data="exec_update"),
                    types.InlineKeyboardButton("↩️ Відкат", callback_data="exec_rollback"))
+        markup.add(types.InlineKeyboardButton("🔃 Перезапуск", callback_data="exec_restart"))
         bot.edit_message_text("🛠️ **Адмін-панель:**", call.message.chat.id, call.message.message_id, reply_markup=markup, parse_mode="Markdown")
 
     elif call.data == "manual_check_now":
@@ -336,6 +340,15 @@ def callback_handler(call):
             with open(".rollback_bot", "w") as f: f.write("1")
             os._exit(0)
         else: bot.answer_callback_query(call.id, "❌ Бекап не знайдено!", show_alert=True)
+
+    elif call.data == "exec_restart":
+        try:
+            bot.edit_message_text("♻️ **Бот перезавантажується...**", call.message.chat.id, call.message.message_id, parse_mode="Markdown")
+            bot.stop_polling()
+            # Перезапуск процесу
+            os.execv(sys.executable, ['python'] + sys.argv)
+        except Exception as e:
+            bot.send_message(call.message.chat.id, f"❌ Помилка перезапуску: {e}")
 
     elif call.data.startswith("notify_"):
         settings['notifications'] = (call.data == "notify_on")
