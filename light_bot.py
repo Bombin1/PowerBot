@@ -23,7 +23,7 @@ MONO_URL = "https://send.monobank.ua/jar/8WFAPWLdPu"
 
 SETTINGS_FILE = 'user_settings.json'
 LOCAL_SCHEDULE_FILE = 'current_schedule.json'
-VERSION = "3.3"  # Поточна версія бота
+VERSION = "3.4"  # Поточна версія бота
 VERSION_URL = "https://raw.githubusercontent.com/Bombin1/PowerBot/main/version.txt"
 CHANGELOG_URL = "https://raw.githubusercontent.com/Bombin1/PowerBot/main/changelog.txt"
 last_update_check_day = None 
@@ -54,12 +54,12 @@ def set_bot_commands():
     admin_commands = [
         types.BotCommand("status", "💡 Перевірити наявність"),
         types.BotCommand("set", "⚙️ Налаштування"),
-        types.BotCommand("help", "ℹ️ Інфо")
+        types.BotCommand("info", "ℹ️ Інфо")
     ]
     # Команди для загальних чатів
     group_commands = [
         types.BotCommand("status", "💡 Перевірити наявність"),
-        types.BotCommand("help", "ℹ️ Інфо")
+        types.BotCommand("info", "ℹ️ Інфо")
     ]
     
     # Реєструємо меню для кожного адміна окремо
@@ -238,18 +238,25 @@ def get_main_keyboard():
     return markup
 
 # --- [ ОБРОБНИКИ КОМАНД ] ---
-@bot.message_handler(commands=['help'])
-def help_command(message):
+@bot.message_handler(commands=['info'])
+def info_command(message):
     try: bot.delete_message(message.chat.id, message.message_id)
     except: pass
     
-    is_admin = (message.from_user.id in ADMIN_IDS and message.chat.type == 'private')
-    help_text = f"📜 **Інфо (v{VERSION}):**\n\n• `/status` — Перевірити світло 💡\n• `/help` — Допомога ℹ️"
-    if is_admin:
-        help_text += "\n• `/set` — Налаштування ⚙️"
+    info_text = (
+        f"ℹ️ **Інформація:**\n\n"
+        f"🤖 **PowerBot (v{VERSION})**\n"
+        f"🤝 Особлива подяка автору [yaroslav2901](https://github.com/yaroslav2901/OE_OUTAGE_DATA.git) "
+        f"за парсер графіків відключень.\n\n"
+        f"🔗 [GitHub]({REPO_URL}) | ☕ [На каву]({MONO_URL})"
+    )
     
-    help_text += f"\n\n🔗 [GitHub]({REPO_URL}) | ☕ [На каву]({MONO_URL})"
-    bot.send_message(message.chat.id, help_text, parse_mode="Markdown", disable_web_page_preview=True)
+    bot.send_message(
+        message.chat.id, 
+        info_text, 
+        parse_mode="Markdown", 
+        disable_web_page_preview=True
+    )
 
 @bot.message_handler(commands=['status'])
 @bot.message_handler(func=lambda message: message.text == "💡 Перевірити наявність")
@@ -371,14 +378,26 @@ def first_run_check():
     marker_file = '.installed'
     if not os.path.exists(marker_file):
         try:
-            admin_mention = f"[@admin](tg://user?id={ADMIN_IDS[0]})" if ADMIN_IDS else "Адміністратор"
-            msg = (f"🛠 **Система активована!**\n\n👤 {admin_mention}, напишіть боту в приват "
-                   f"та натисніть **/start** (або оберіть меню), щоб керувати.")
+            # Отримуємо дані бота (username), щоб посилання було актуальним для кожного користувача
+            me = bot.get_me()
+            bot_link = f"https://t.me/{me.username}"
+            
+            msg = (
+                f"🤖 **PowerBot активований!**\n\n"
+                f"👤 **Адмін**, щоб я міг надсилати сповіщення та відкрити налаштування, "
+                f"ви маєте написати мені першим.\n\n"
+                f"👉 **Натисніть сюди:** {bot_link}\n"
+                f"Та натисніть кнопку **START**."
+            )
+            
+            # Надсилаємо повідомлення в загальну групу (CHAT_ID)
             bot.send_message(CHAT_ID, msg, parse_mode="Markdown")
             
+            # Створюємо файл-маркер, щоб більше не спамити при рестартах
             with open(marker_file, 'w') as f:
                 f.write(datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
-        except: pass
+        except Exception as e:
+            print(f"[LOG] Помилка першого запуску: {e}")
 
 if __name__ == "__main__":
     subprocess.run(["termux-wake-lock"])
