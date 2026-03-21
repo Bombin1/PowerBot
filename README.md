@@ -5,7 +5,7 @@
 Бот працює в середовищі Termux, аналізує статус живлення мережі та миттєво повідомляє про зміни в Telegram.
 
 <p align="center">
-  <img src="PowerBot.png" width="1000" alt="Меню бота">
+  <img src="https://raw.githubusercontent.com/Bombin1/PowerBot/media/PowerBot.png" width="1000" alt="Меню бота">
 </p>
 
 ## ✨ Основні можливості
